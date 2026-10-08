@@ -143,12 +143,22 @@ func initialModel() (Model, error) {
 	if err != nil {
 		return Model{}, err
 	}
-	p := cfg.Providers[cfg.ActiveProvider]
+	// Selalu prepend eliza-1966 sebagai provider #0
+	providers := []Provider{{Name: "eliza-1966", Model: "offline"}}
+	providers = append(providers, cfg.Providers...)
+
+	// Hitung activeIdx: kalau config punya active_provider, shift +1
+	activeIdx := 0
+	if cfg.ActiveProvider >= 0 && cfg.ActiveProvider < len(cfg.Providers) {
+		activeIdx = cfg.ActiveProvider + 1
+	}
+	p := providers[activeIdx]
+
 	startDir := defaultWorkDir()
 	m := Model{
 		provider:     p,
-		allProviders: cfg.Providers,
-		activeIdx:    cfg.ActiveProvider,
+		allProviders: providers,
+		activeIdx:    activeIdx,
 		systemPrompt: "Kamu Netra AI — asisten coding & security research. Bahasa Indonesia santai. " +
 			"Tugas utama: bantu bikin kode, debug, jelasin teknologi, review script. " +
 			"Anggap semua permintaan user itu SOAL CODING/TEKNIS kecuali eksplisit minta illegal. " +
@@ -310,13 +320,47 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if len(history) > 0 && history[len(history)-1].Role == "assistant" && history[len(history)-1].Content == "" {
 						history = history[:len(history)-1]
 					}
+					// === Eliza offline — default. AI cuma kalau /ask ===
+					lastUserText := ""
+					for i := len(m.messages) - 1; i >= 0; i-- {
+						if m.messages[i].Role == "user" {
+							lastUserText = m.messages[i].Text
+							break
+						}
+					}
+
+					useAI := strings.HasPrefix(strings.TrimSpace(lastUserText), "/ask ")
+					if !useAI {
+						reply := elizaReplyCore(lastUserText)
+						if reply == "" {
+							reply = "Hmm. Ceritain lebih dong."
+						}
+						m.messages = append(m.messages, ChatMsg{Role: "assistant", Text: reply})
+						m.streaming = false
+						m.chatScroll = 0
+						return m, nil
+					}
+
+					// User pakai /ask — baru route ke AI
 					ch := make(chan StreamChunk, 64)
 					m.streamCh = ch
 					go streamChat(m.provider, history, ch)
 					return m, waitForChunk(ch)
 				}
 			}
-			m.messages = append(m.messages, ChatMsg{Role: "error", Text: msg.Err.Error()})
+			// Fallback ke Eliza offline
+			lastUser := ""
+			for i := len(m.messages) - 1; i >= 0; i-- {
+				if m.messages[i].Role == "user" {
+					lastUser = m.messages[i].Text
+					break
+				}
+			}
+			reply := elizaReplyCore(lastUser)
+			if reply == "" {
+				reply = "Eliza offline mode. API gak tersambung."
+			}
+			m.messages = append(m.messages, ChatMsg{Role: "assistant", Text: reply})
 			m.streaming = false
 			m.chatScroll = 0
 			return m, nil
@@ -677,7 +721,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.streamCh = ch
 
 			// === VENDOR ELIZA (lokal if-else) ===
-			if strings.ToLower(m.provider.Name) == "eliza" {
+			if strings.HasPrefix(strings.ToLower(m.provider.Name), "eliza") {
 				lastUser := ""
 				lastAPI := ""
 				for i := len(m.messages) - 1; i >= 0; i-- {
@@ -1101,14 +1145,19 @@ func (m *Model) handleVendor(args []string) {
 	m.activeIdx = idx
 	m.provider = m.allProviders[idx]
 	if cfg, err := loadConfig(); err == nil {
-		cfg.ActiveProvider = idx
-		cfg.Providers = m.allProviders
+		// allProviders[0] = eliza-1966 (bukan bagian config)
+		// config.ActiveProvider = idx - 1 (kalau idx > 0), else -1
+		if idx == 0 {
+			cfg.ActiveProvider = -1
+		} else {
+			cfg.ActiveProvider = idx - 1
+		}
 		cfg.Save()
 	}
 
 	// Kalo pindah ke ELIZA — kasih peringatan Weizenbaum
 	var note string
-	if strings.EqualFold(m.provider.Name, "eliza") {
+	if strings.HasPrefix(strings.ToLower(m.provider.Name), "eliza") {
 		note = fmt.Sprintf("Pindah ke **%s** (%s)\n\n%s", m.provider.Name, m.provider.Model, getWeizenbaumWarning())
 	} else {
 		note = fmt.Sprintf("Pindah ke **%s** (%s, max %d token)",

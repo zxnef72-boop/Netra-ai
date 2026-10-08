@@ -54,9 +54,7 @@ func loadConfig() (*Config, error) {
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return nil, err
 	}
-	if len(cfg.Providers) == 0 {
-		return nil, fmt.Errorf("providers kosong")
-	}
+	// providers kosong = Eliza offline mode
 	if cfg.ActiveProvider < 0 || cfg.ActiveProvider >= len(cfg.Providers) {
 		cfg.ActiveProvider = 0
 	}
