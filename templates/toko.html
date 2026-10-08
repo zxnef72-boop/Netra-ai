@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Toko Online</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', sans-serif; }
+body { background: #f4f4f9; color: #333; }
+header { background: #2c3e50; color: white; padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center; }
+header h1 { font-size: 1.5rem; }
+header nav a { color: white; text-decoration: none; margin-left: 1rem; }
+.hero { background: linear-gradient(135deg, #667eea, #764ba2); color: white; text-align: center; padding: 4rem 2rem; }
+.hero h2 { font-size: 2.5rem; margin-bottom: 1rem; }
+.btn { background: #f39c12; color: white; padding: 0.8rem 2rem; border: none; border-radius: 4px; cursor: pointer; font-size: 1rem; }
+.products { max-width: 1200px; margin: 2rem auto; padding: 0 2rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; }
+.card { background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.1); transition: transform 0.2s; }
+.card:hover { transform: translateY(-4px); }
+.card img { width: 100%; height: 200px; object-fit: cover; background: #ddd; }
+.card-body { padding: 1rem; }
+.card-body h3 { margin-bottom: 0.5rem; }
+.card-body p { color: #666; font-size: 0.9rem; margin-bottom: 0.5rem; }
+.price { color: #e74c3c; font-weight: bold; font-size: 1.1rem; }
+footer { background: #2c3e50; color: white; text-align: center; padding: 1.5rem; margin-top: 3rem; }
+</style>
+</head>
+<body>
+<header>
+<h1>🛒 TokoKu</h1>
+<nav><a href="#">Home</a><a href="#produk">Produk</a><a href="#kontak">Kontak</a></nav>
+</header>
+<section class="hero">
+<h2>Selamat Datang di TokoKu</h2>
+<p>Produk berkualitas, harga terjangkau</p>
+<br><button class="btn" onclick="document.getElementById('produk').scrollIntoView({behavior:'smooth'})">Belanja Sekarang</button>
+</section>
+<section class="products" id="produk">
+<div class="card"><div style="height:200px;background:#ddd"></div><div class="card-body"><h3>Produk 1</h3><p>Deskripsi produk</p><span class="price">Rp 100.000</span></div></div>
+<div class="card"><div style="height:200px;background:#ddd"></div><div class="card-body"><h3>Produk 2</h3><p>Deskripsi produk</p><span class="price">Rp 150.000</span></div></div>
+<div class="card"><div style="height:200px;background:#ddd"></div><div class="card-body"><h3>Produk 3</h3><p>Deskripsi produk</p><span class="price">Rp 200.000</span></div></div>
+</section>
+<footer id="kontak"><p>&copy; 2026 TokoKu. All rights reserved.</p></footer>
+</body>
+</html>

@@ -1,0 +1,12 @@
+{
+  "providers": [
+    {
+      "name": "openrouter",
+      "type": "openrouter",
+      "api_key": "sk-or-v1-xxxxxxxx",
+      "model": "anthropic/claude-3.5-sonnet",
+      "base_url": "https://openrouter.ai/api/v1"
+    }
+  ],
+  "active_provider": 0
+}

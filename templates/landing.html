@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Landing Page</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', sans-serif; }
+body { background: #0f0f14; color: #e6e6ec; }
+.hero { min-height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 2rem; background: radial-gradient(circle at center, #1a1a2e, #0f0f14); }
+.hero h1 { font-size: 3rem; margin-bottom: 1rem; background: linear-gradient(90deg, #a78bfa, #7aa2f7); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.hero p { font-size: 1.2rem; color: #9aa5ce; max-width: 600px; margin-bottom: 2rem; }
+.cta { background: #a78bfa; color: white; padding: 1rem 2.5rem; border: none; border-radius: 50px; font-size: 1.1rem; cursor: pointer; transition: 0.3s; }
+.cta:hover { background: #8b5cf6; transform: scale(1.05); }
+.features { max-width: 1200px; margin: 0 auto; padding: 4rem 2rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 2rem; }
+.feature { background: #1a1a24; padding: 2rem; border-radius: 12px; border: 1px solid #2a2a3a; }
+.feature h3 { color: #a78bfa; margin-bottom: 0.5rem; }
+.feature p { color: #9aa5ce; line-height: 1.6; }
+</style>
+</head>
+<body>
+<section class="hero">
+<h1>Netra AI</h1>
+<p>Tools security research & OSINT untuk profesional. Cepat, ringan, cross-platform.</p>
+<button class="cta">Mulai Sekarang</button>
+</section>
+<section class="features">
+<div class="feature"><h3>⚡ Cepat</h3><p>Binary Go, 1 file, jalan di mana aja.</p></div>
+<div class="feature"><h3>🔒 Aman</h3><p>Data lokal, gak ada telemetry.</p></div>
+<div class="feature"><h3>🌐 Multi-Provider</h3><p>OpenRouter, Groq, Gemini, Ollama.</p></div>
+</section>
+</body>
+</html>

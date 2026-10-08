@@ -1,0 +1,49 @@
+# Tutorial: Python Basic
+
+Waktu: 15 menit | Level: Pemula
+
+## 1. VARIABEL
+
+    nama = "Anzar"
+    umur = 21
+    print(f"Halo {nama}, umur {umur}")
+
+## 2. IF-ELSE
+
+    if umur >= 18:
+        print("Dewasa")
+    else:
+        print("Anak-anak")
+
+## 3. LOOP
+
+    for i in range(5):
+        print(i)
+
+## 4. FUNCTION
+
+    def sapa(nama):
+        return f"Halo {nama}!"
+
+    print(sapa("Bub"))
+
+## 5. LIST DAN DICT
+
+    buah = ["apel", "mangga", "jeruk"]
+    for b in buah:
+        print(b)
+
+    orang = {"nama": "Anzar", "umur": 21}
+    print(orang["nama"])
+
+## 6. IMPORT MODUL
+
+    import os
+    print(os.getcwd())
+
+## Latihan
+
+Coba bikin program yang:
+1. Tanya nama user
+2. Tanya umur user
+3. Print "Halo [nama], umur kamu [umur] tahun"

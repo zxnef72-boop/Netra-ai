@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="id"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Kalkulator</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:system-ui,sans-serif}
+body{background:#0f0f14;color:#e6e6ec;min-height:100vh;display:flex;justify-content:center;align-items:center;padding:20px}
+.calc{width:100%;max-width:320px;background:#16161e;border:1px solid #2a2a3a;border-radius:16px;padding:20px}
+.screen{background:#0a0a10;border-radius:10px;padding:16px;margin-bottom:16px;text-align:right;min-height:80px}
+.expr{color:#565f89;font-size:.85rem;min-height:18px}
+.result{color:#c0caf5;font-size:2rem;font-weight:700;margin-top:6px;word-break:break-all}
+.keys{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+button{padding:16px 0;background:#1a1a24;border:1px solid #2a2a3a;color:#e6e6ec;font-size:1.1rem;font-weight:600;border-radius:10px;cursor:pointer}
+button:hover{background:#22222e}
+.op{color:#a78bfa}
+.eq{background:#a78bfa;color:#fff;grid-row:span 2}
+.clear{color:#f7768e}
+</style></head><body>
+<div class="calc">
+<div class="screen"><div class="expr" id="e">&nbsp;</div><div class="result" id="r">0</div></div>
+<div class="keys">
+<button class="clear" onclick="clr()">AC</button>
+<button class="op" onclick="press('%')">%</button>
+<button class="op" onclick="del()">⌫</button>
+<button class="op" onclick="press('/')">÷</button>
+<button onclick="press('7')">7</button><button onclick="press('8')">8</button><button onclick="press('9')">9</button>
+<button class="op" onclick="press('*')">×</button>
+<button onclick="press('4')">4</button><button onclick="press('5')">5</button><button onclick="press('6')">6</button>
+<button class="op" onclick="press('-')">−</button>
+<button onclick="press('1')">1</button><button onclick="press('2')">2</button><button onclick="press('3')">3</button>
+<button class="op" onclick="press('+')">+</button>
+<button onclick="press('0')">0</button><button onclick="press('.')">.</button>
+<button class="eq" onclick="eq()">=</button>
+</div></div>
+<script>
+let c='0';const $=id=>document.getElementById(id);
+function u(){$('r').textContent=c;$('e').innerHTML=c.replace(/\*/g,'×').replace(/\//g,'÷')||'&nbsp;'}
+function press(v){c=(c==='0'&&/[0-9.]/.test(v))?v:c+v;u()}
+function clr(){c='0';$('e').textContent='';u()}
+function del(){c=c.length>1?c.slice(0,-1):'0';u()}
+function eq(){try{const x=Function('"use strict";return('+c+')')();$('e').textContent=c+' =';c=String(Number.isFinite(x)?x:'Error');$('r').textContent=c}catch(e){c='Error';$('r').textContent=c}}
+u();
+document.addEventListener('keydown',e=>{if(/[0-9+\-*/.%]/.test(e.key))press(e.key);else if(e.key==='Enter')eq();else if(e.key==='Backspace')del();else if(e.key==='Escape')clr()});
+</script></body></html>

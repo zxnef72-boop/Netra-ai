@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="id"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Jam</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:system-ui,sans-serif}
+body{background:#0a0a10;color:#e6e6ec;min-height:100vh;display:flex;justify-content:center;align-items:center;flex-direction:column;padding:20px;gap:20px}
+.clock{text-align:center;background:#16161e;border:1px solid #2a2a3a;border-radius:20px;padding:40px 60px}
+.time{font-size:clamp(3rem,15vw,6rem);font-weight:200;color:#c0caf5;font-variant-numeric:tabular-nums;letter-spacing:2px;line-height:1}
+.time .sec{font-size:.4em;color:#a78bfa}
+.date{color:#9aa5ce;font-size:1.1rem;margin-top:16px}
+.tz{color:#565f89;font-size:.85rem;margin-top:8px}
+.info{display:flex;gap:20px;color:#565f89;font-size:.85rem}
+.info span{color:#a78bfa}
+</style></head><body>
+<div class="clock">
+<div class="time" id="time">--:--<span class="sec">:--</span></div>
+<div class="date" id="date">Loading...</div>
+<div class="tz" id="tz">--</div>
+</div>
+<div class="info">
+<span id="uptime">0s</span> uptime
+<span id="res">--</span> resolution
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const t0=Date.now();
+function pad(n){return String(n).padStart(2,'0')}
+function tick(){
+  const d=new Date();
+  const h=pad(d.getHours()),m=pad(d.getMinutes()),s=pad(d.getSeconds());
+  $('time').innerHTML=h+':'+m+'<span class="sec">:'+s+'</span>';
+  $('date').textContent=d.toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  const off=-d.getTimezoneOffset()/60;
+  $('tz').textContent='UTC'+(off>=0?'+':'')+off+' · '+Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const up=Math.floor((Date.now()-t0)/1000);
+  $('uptime').textContent=up<60?up+'s':Math.floor(up/60)+'m '+up%60+'s';
+  $('res').textContent=window.screen.width+'×'+window.screen.height;
+}
+tick();setInterval(tick,1000);
+document.addEventListener('keydown',e=>{if(e.key==='f'||e.key==='F'){document.documentElement.requestFullscreen?.()}});
+</script></body></html>

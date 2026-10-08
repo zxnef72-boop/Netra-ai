@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Netra IDE</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    background: #1a1b26;
+    color: #c0caf5;
+    margin: 0;
+    padding: 0;
+    font-family: ui-monospace, "Roboto Mono", "Cascadia Code", monospace;
+    font-size: 13px;
+    line-height: 1.5;
+    height: 100%;
+    overflow: hidden;
+  }
+  #app {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+  }
+
+  /* HEADER */
+  #header {
+    display: flex;
+    align-items: center;
+    background: #16161e;
+    border-bottom: 1px solid #292e42;
+    padding: 10px 12px;
+    font-weight: bold;
+    letter-spacing: 0.5px;
+    flex-shrink: 0;
+  }
+  #menuBtn {
+    background: transparent;
+    color: #7aa2f7;
+    border: 1px solid #292e42;
+    padding: 2px 10px;
+    margin-right: 12px;
+    font-family: inherit;
+    font-size: 16px;
+    cursor: pointer;
+  }
+  #menuBtn:active { background: #292e42; }
+  #headerTitle { color: #c0caf5; }
+
+  /* VIEW */
+  #view { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+
+  /* LIST */
+  #listView {
+    padding: 12px;
+    overflow-y: auto;
+    flex: 1;
+  }
+  .section-label {
+    color: #565f89;
+    font-size: 11px;
+    letter-spacing: 1px;
+    padding: 6px 4px;
+    border-bottom: 1px solid #292e42;
+    margin-bottom: 8px;
+  }
+  .file-item {
+    padding: 10px 12px;
+    border-bottom: 1px solid #1f2335;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: #c0caf5;
+  }
+  .file-item:active { background: #24283b; }
+  .file-item .name { color: #7aa2f7; }
+  .file-item .size { color: #565f89; font-size: 11px; }
+
+  /* EDITOR VIEW */
+  #editorView {
+    display: none;
+    flex-direction: column;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  #currentFile {
+    padding: 6px 12px;
+    background: #16161e;
+    border-bottom: 1px solid #292e42;
+    color: #bb9af7;
+    font-size: 12px;
+    flex-shrink: 0;
+  }
+
+  .edit-area {
+    display: flex;
+    flex: 1;
+    background: #1a1b26;
+    overflow: hidden;
+    min-height: 0;
+  }
+  .linenums {
+    width: 28px;
+    padding: 8px 4px 8px 0;
+    text-align: right;
+    background: #16161e;
+    color: #3b4261;
+    overflow: hidden;
+    user-select: none;
+    white-space: pre;
+    font-size: 13px;
+    line-height: 1.5;
+    border-right: 1px solid #292e42;
+    flex-shrink: 0;
+  }
+  .code-wrap {
+    position: relative;
+    flex: 1;
+    overflow: hidden;
+    min-width: 0;
+  }
+  #highlight, #editor {
+    position: absolute;
+    inset: 0;
+    padding: 8px 10px;
+    margin: 0;
+    border: 0;
+    outline: none;
+    font-family: inherit;
+    font-size: 13px;
+    line-height: 1.5;
+    white-space: pre;
+    overflow: auto;
+    background: transparent;
+    tab-size: 4;
+    -moz-tab-size: 4;
+    word-wrap: normal;
+    word-break: normal;
+  }
+  #editor {
+    color: transparent;
+    caret-color: #7aa2f7;
+    z-index: 2;
+    resize: none;
+    -webkit-text-fill-color: transparent;
+  }
+  #highlight {
+    z-index: 1;
+    pointer-events: none;
+    color: #c0caf5;
+  }
+
+  /* TOKEN COLORS (Tokyo Night) */
+  .tk-c { color: #565f89; font-style: italic; }
+  .tk-s { color: #9ece6a; }
+  .tk-k { color: #bb9af7; }
+  .tk-n { color: #ff9e64; }
+  .tk-f { color: #7aa2f7; }
+  .tk-t { color: #2ac3de; }
+
+  /* BOTTOM BAR */
+  #bottombar {
+    display: flex;
+    background: #16161e;
+    border-top: 1px solid #292e42;
+    flex-shrink: 0;
+  }
+  #bottombar button {
+    flex: 1;
+    background: transparent;
+    color: #c0caf5;
+    border: 0;
+    border-right: 1px solid #292e42;
+    padding: 12px;
+    font-family: inherit;
+    font-size: 13px;
+    cursor: pointer;
+    letter-spacing: 1px;
+  }
+  #bottombar button:last-child { border-right: 0; }
+  #bottombar button:active { background: #292e42; color: #7aa2f7; }
+  #statusbar {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 12px;
+    background: #1f2335;
+    border-top: 1px solid #292e42;
+    color: #565f89;
+    font-size: 11px;
+    flex-shrink: 0;
+  }
+  #statusbar span { color: #7aa2f7; }
+
+  #out {
+    padding: 8px 12px;
+    background: #16161e;
+    border-top: 1px solid #292e42;
+    white-space: pre-wrap;
+    font-size: 11px;
+    color: #9ece6a;
+    max-height: 20vh;
+    overflow: auto;
+    flex-shrink: 0;
+  }
+
+  /* SIDEBAR */
+  #sidebar {
+    position: fixed;
+    top: 0; left: 0;
+    width: 220px;
+    height: 100%;
+    background: #16161e;
+    border-right: 1px solid #292e42;
+    transform: translateX(-100%);
+    transition: transform 0.15s;
+    z-index: 100;
+    padding: 0;
+  }
+  #sidebar.open { transform: translateX(0); }
+  #sidebar .title {
+    padding: 14px 16px;
+    color: #bb9af7;
+    font-weight: bold;
+    letter-spacing: 1px;
+    border-bottom: 1px solid #292e42;
+  }
+  #sidebar .item {
+    padding: 12px 16px;
+    border-bottom: 1px solid #1f2335;
+    cursor: pointer;
+    color: #c0caf5;
+  }
+  #sidebar .item:active { background: #24283b; }
+  #backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: 99;
+    display: none;
+  }
+  #backdrop.open { display: block; }
+
+  /* MODAL */
+  #modalBg {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.7);
+    z-index: 200;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  #modalBg.open { display: flex; }
+  #modal {
+    background: #1a1b26;
+    border: 1px solid #292e42;
+    padding: 16px;
+    width: 100%;
+    max-width: 400px;
+  }
+  #modal .mtitle {
+    color: #bb9af7;
+    margin-bottom: 12px;
+    font-size: 13px;
+  }
+  #modal input {
+    width: 100%;
+    margin-bottom: 12px;
+  }
+  #modal .mbtns {
+    display: flex;
+    gap: 8px;
+  }
+  #modal .mbtns button {
+    flex: 1;
+    padding: 10px;
+  }
+</style>
+</head>
+<body>
+
+<div id="sidebar">
+  <div class="title">NETRA IDE</div>
+  <div class="item" onclick="goList()">DAFTAR FILE</div>
+  <div class="item" onclick="closeSidebar()">TUTUP</div>
+</div>
+<div id="backdrop" onclick="closeSidebar()"></div>
+
+<div id="app">
+
+  <div id="header">
+    <button id="menuBtn" onclick="openSidebar()">=</button>
+    <span id="headerTitle" style="flex:1;">DAFTAR FILE</span>
+    <button onclick="newFolder()" title="Bikin folder baru" style="background:transparent;color:#7aa2f7;border:1px solid #292e42;padding:2px 10px;margin-left:6px;font-family:inherit;cursor:pointer;">+DIR</button>
+    <button onclick="newFile()" title="Bikin file baru" style="background:transparent;color:#7aa2f7;border:1px solid #292e42;padding:2px 10px;margin-left:6px;font-family:inherit;cursor:pointer;">+FILE</button>
+  </div>
+
+  <div id="view">
+
+    <div id="listView">
+      <div class="row" style="margin-bottom:10px;">
+        <select id="filter" onchange="renderList()">
+          <option value="">SEMUA</option>
+          <option value=".go">GO</option>
+          <option value=".lua">LUA</option>
+          <option value=".py">PYTHON</option>
+          <option value=".html">HTML</option>
+          <option value=".css">CSS</option>
+          <option value=".js">JS</option>
+          <option value=".java">JAVA</option>
+          <option value=".sh">SHELL</option>
+          <option value=".c">C</option>
+          <option value=".rs">RUST</option>
+          <option value=".md">MARKDOWN</option>
+          <option value=".json">JSON</option>
+        </select>
+      </div>
+      <div class="section-label" id="listLabel">FILE (0)</div>
+      <div id="fileItems"></div>
+    </div>
+
+    <div id="editorView">
+      <div id="currentFile">-</div>
+      <div class="edit-area">
+        <div class="linenums" id="lineNums">1</div>
+        <div class="code-wrap">
+          <pre id="highlight" aria-hidden="true"></pre>
+          <textarea id="editor" spellcheck="false" autocapitalize="off" autocorrect="off"></textarea>
+        </div>
+      </div>
+      <div id="bottombar">
+        <button onclick="saveFile()">SAVE</button>
+        <button onclick="runCmd()">RUN</button>
+        <button onclick="goList()">KEMBALI</button>
+      </div>
+      <div id="statusbar">
+        <span id="stPos">Ln 1, Col 1</span>
+        <span id="stInfo">UTF-8</span>
+      </div>
+      <div id="out">Siap.</div>
+    </div>
+
+  </div>
+</div>
+
+<div id="modalBg">
+  <div id="modal">
+    <div class="mtitle" id="modalTitle">INPUT</div>
+    <input id="modalInput" type="text" autocapitalize="off" autocorrect="off" spellcheck="false">
+    <div class="mbtns">
+      <button onclick="modalCancel()">BATAL</button>
+      <button onclick="modalOk()">OK</button>
+    </div>
+  </div>
+</div>
+
+<script>
+var TOKEN = "rahasia-netra-2026";
+var API = (location.protocol === "file:") ? "http://127.0.0.1:8080" : location.origin;
+var H = { "X-Netra-Token": TOKEN, "Content-Type": "application/json" };
+var currentFile = "";
+var savedScroll = {};  // simpan scroll per file
+
+function $(id) { return document.getElementById(id); }
+function log(s) { $('out').textContent = s; }
+
+// Keywords Go + Lua
+var KEYWORDS = new Set(("package import func return if else for while var const type struct map chan go defer range switch case default break continue nil true false " +
+  "local then do end function and or not repeat until elseif").split(" "));
+
+function esc(s) {
+  return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+function highlight(code) {
+  var out = "";
+  var i = 0, n = code.length;
+  while (i < n) {
+    var c = code[i];
+    // comment //
+    if (c === "/" && code[i+1] === "/") {
+      var j = code.indexOf("\n", i); if (j === -1) j = n;
+      out += '<span class="tk-c">' + esc(code.slice(i, j)) + '</span>';
+      i = j; continue;
+    }
+    // comment --
+    if (c === "-" && code[i+1] === "-") {
+      var j = code.indexOf("\n", i); if (j === -1) j = n;
+      out += '<span class="tk-c">' + esc(code.slice(i, j)) + '</span>';
+      i = j; continue;
+    }
+    // string
+    if (c === '"' || c === "'" || c === "`") {
+      var j = i + 1;
+      while (j < n && code[j] !== c) {
+        if (code[j] === "\\") j++;
+        j++;
+      }
+      if (j < n) j++;
+      out += '<span class="tk-s">' + esc(code.slice(i, j)) + '</span>';
+      i = j; continue;
+    }
+    // number
+    if (c >= "0" && c <= "9" && (i === 0 || !/[a-zA-Z0-9_]/.test(code[i-1]))) {
+      var j = i;
+      while (j < n && /[0-9.]/.test(code[j])) j++;
+      out += '<span class="tk-n">' + esc(code.slice(i, j)) + '</span>';
+      i = j; continue;
+    }
+    // identifier
+    if (/[a-zA-Z_]/.test(c)) {
+      var j = i;
+      while (j < n && /[a-zA-Z0-9_]/.test(code[j])) j++;
+      var w = code.slice(i, j);
+      if (KEYWORDS.has(w)) {
+        out += '<span class="tk-k">' + w + '</span>';
+      } else if (j < n && code[j] === "(") {
+        out += '<span class="tk-f">' + w + '</span>';
+      } else {
+        out += esc(w);
+      }
+      i = j; continue;
+    }
+    out += esc(c);
+    i++;
+  }
+  return out;
+}
+
+function updateLineNums() {
+  var lines = $('editor').value.split("\n").length;
+  var s = "";
+  for (var i = 1; i <= lines; i++) s += i + "\n";
+  $('lineNums').textContent = s;
+}
+
+function updateHighlight() {
+  var v = $('editor').value;
+  if (v.endsWith("\n")) v += " ";
+  $('highlight').textContent = "";
+  $('highlight').innerHTML = highlight(v);
+  updateLineNums();
+}
+
+function syncScroll() {
+  $('highlight').scrollTop = $('editor').scrollTop;
+  $('highlight').scrollLeft = $('editor').scrollLeft;
+  $('lineNums').scrollTop = $('editor').scrollTop;
+}
+
+function updateStatus() {
+  var v = $('editor').value.substring(0, $('editor').selectionStart);
+  var lines = v.split("\n");
+  var ln = lines.length;
+  var col = lines[lines.length - 1].length + 1;
+  $('stPos').textContent = "Ln " + ln + ", Col " + col;
+  $('stInfo').textContent = "UTF-8  |  " + (currentFile || "-");
+}
+
+function openSidebar() {
+  $('sidebar').classList.add('open');
+  $('backdrop').classList.add('open');
+}
+function closeSidebar() {
+  $('sidebar').classList.remove('open');
+  $('backdrop').classList.remove('open');
+}
+
+function showView(v) {
+  $('listView').style.display = (v === 'list') ? 'block' : 'none';
+  $('editorView').style.display = (v === 'editor') ? 'flex' : 'none';
+  $('headerTitle').textContent = (v === 'list') ? 'DAFTAR FILE' : 'EDITOR';
+}
+
+function goList() {
+  showView('list');
+  closeSidebar();
+}
+
+function showOffline() {
+  var box = $('fileItems');
+  box.innerHTML = '<div style="padding:20px;text-align:center;color:#f7768e;">' +
+    'SERVER OFFLINE<br><br>' +
+    '<span style="font-size:11px;color:#565f89;">Jalankan di Termux:<br>' +
+    '~/netra-ai/netra-server/netra-server</span><br><br>' +
+    '<button onclick="listFiles()" style="background:transparent;border:1px solid #7aa2f7;color:#7aa2f7;padding:8px 16px;font-family:inherit;cursor:pointer;">RETRY</button>' +
+    '</div>';
+  $('listLabel').textContent = "FILE .GO (offline)";
+}
+
+var allFiles = [];
+
+function formatSize(n) {
+  if (n < 1024) return n + " B";
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
+  return (n / 1024 / 1024).toFixed(2) + " MB";
+}
+
+var modalResolve = null;
+function askInput(title, placeholder) {
+  return new Promise(function(resolve) {
+    modalResolve = resolve;
+    $('modalTitle').textContent = title;
+    $('modalInput').value = '';
+    $('modalInput').placeholder = placeholder || '';
+    $('modalBg').classList.add('open');
+    setTimeout(function() { $('modalInput').focus(); }, 100);
+  });
+}
+function modalOk() {
+  var v = $('modalInput').value;
+  $('modalBg').classList.remove('open');
+  if (modalResolve) { modalResolve(v); modalResolve = null; }
+}
+function modalCancel() {
+  $('modalBg').classList.remove('open');
+  if (modalResolve) { modalResolve(null); modalResolve = null; }
+}
+$('modalInput').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') { e.preventDefault(); modalOk(); }
+});
+
+async function newFolder() {
+  var name = await askInput("Nama folder", "folder-baru");
+  if (!name) return;
+  name = name.trim();
+  if (!name) return;
+  try {
+    var r = await fetch(API + "/api/mkdir", {
+      method: "POST", headers: H,
+      body: JSON.stringify({ name: name })
+    });
+    var j = await r.json();
+    if (j.error) { log("Error: " + j.error); return; }
+    log("Folder dibuat: " + j.path);
+    listFiles();
+  } catch (e) { log("Error: " + e); }
+}
+
+async function newFile() {
+  var name = await askInput("Nama file", "baru.go");
+  if (!name) return;
+  name = name.trim();
+  if (!name) return;
+  try {
+    var r = await fetch(API + "/api/newfile", {
+      method: "POST", headers: H,
+      body: JSON.stringify({ name: name, content: "" })
+    });
+    var j = await r.json();
+    if (j.error) { log("Error: " + j.error); return; }
+    log("File dibuat: " + j.path);
+    listFiles();
+    setTimeout(function() { openFile(name); }, 300);
+  } catch (e) { log("Error: " + e); }
+}
+
+async function listFiles() {
+  try {
+    var r = await fetch(API + "/api/files", { headers: H });
+    if (!r.ok) { showOffline(); return; }
+    var j = await r.json();
+    allFiles = j.files || [];
+    renderList();
+    log("Loaded " + allFiles.length + " file.");
+  } catch (e) {
+    showOffline();
+    log("Server offline. Retry kapan aja.");
+  }
+}
+
+function renderList() {
+  var flt = $('filter').value;
+  var files = allFiles.filter(function(f) { return flt === "" || f.ext === flt; });
+  var box = $('fileItems');
+  box.innerHTML = '';
+  if (files.length === 0) {
+    box.innerHTML = '<div style="padding:20px;text-align:center;color:#565f89;">Gak ada file</div>';
+    $('listLabel').textContent = "FILE (0)";
+    return;
+  }
+  files.forEach(function(f) {
+    var d = document.createElement('div');
+    d.className = 'file-item';
+    d.innerHTML = '<span class="name">' + esc(f.name) + '</span><span class="size">' + formatSize(f.size) + '</span>';
+    d.onclick = function() { openFile(f.name); };
+    box.appendChild(d);
+  });
+  $('listLabel').textContent = "FILE (" + files.length + ")";
+}
+
+async function openFile(name) {
+  // Simpan posisi scroll file sebelumnya
+  if (currentFile) savedScroll[currentFile] = $('editor').scrollTop;
+  var r = await fetch(API + "/api/read?p=" + encodeURIComponent(name), { headers: H });
+  var j = await r.json();
+  if (j.error) { log("Error: " + j.error); return; }
+  currentFile = name;
+  $('currentFile').textContent = "FILE: " + name;
+  $('editor').value = j.content || '';
+  updateHighlight();
+  log("Opened: " + name);
+  showView('editor');
+  setTimeout(function() {
+    if (savedScroll[name] !== undefined) {
+      $('editor').scrollTop = savedScroll[name];
+      syncScroll();
+    }
+  }, 0);
+}
+
+async function saveFile() {
+  if (!currentFile) return;
+  var content = $('editor').value;
+  var r = await fetch(API + "/api/write", {
+    method: "POST",
+    headers: H,
+    body: JSON.stringify({ name: currentFile, content: content })
+  });
+  var j = await r.json();
+  // Jangan reload - posisi tetap
+  log(j.error ? ("Error: " + j.error) : "Saved: " + currentFile);
+}
+
+async function runCmd() {
+  var cmd = prompt("Command (go, lua, gofmt):", "go version");
+  if (!cmd) return;
+  log("$ " + cmd + " ...");
+  var r = await fetch(API + "/api/run", {
+    method: "POST",
+    headers: H,
+    body: JSON.stringify({ cmd: cmd })
+  });
+  var j = await r.json();
+  log("$ " + cmd + "\n" + (j.output || "") + (j.error ? "\n[ERR] " + j.error : ""));
+}
+
+// Event wiring
+$('editor').addEventListener("input", updateHighlight);
+$('editor').addEventListener("scroll", syncScroll);
+$('editor').addEventListener("keyup", updateStatus);
+$('editor').addEventListener("click", updateStatus);
+$('editor').addEventListener("keydown", function(e) {
+  if (e.key === "Tab") {
+    e.preventDefault();
+    var s = this.selectionStart, en = this.selectionEnd;
+    this.value = this.value.substring(0, s) + "    " + this.value.substring(en);
+    this.selectionStart = this.selectionEnd = s + 4;
+    updateHighlight();
+  }
+});
+
+listFiles();
+setInterval(function() {
+  if ($('listLabel').textContent.indexOf("offline") !== -1) listFiles();
+}, 3000);
+</script>
+</body>
+</html>

@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="id"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Snake Game</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:system-ui,sans-serif}
+body{background:#0a0a10;color:#e6e6ec;min-height:100vh;display:flex;justify-content:center;align-items:center;padding:20px;flex-direction:column;gap:12px}
+h1{font-size:1.5rem;color:#a78bfa}
+canvas{background:#16161e;border:2px solid #2a2a3a;border-radius:12px;display:block;max-width:100%}
+.info{display:flex;gap:20px;color:#9aa5ce;font-size:.9rem}
+.info span{color:#a78bfa;font-weight:700}
+.ctrl{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+.ctrl button{background:#1a1a24;border:1px solid #2a2a3a;color:#e6e6ec;padding:10px 16px;border-radius:8px;font-size:1rem;cursor:pointer;min-width:50px}
+.ctrl button:hover{border-color:#a78bfa}
+</style></head><body>
+<h1>🐍 Snake</h1>
+<div class="info">Score: <span id="score">0</span> | Best: <span id="best">0</span></div>
+<canvas id="cv" width="300" height="300"></canvas>
+<div class="ctrl">
+<button onclick="dir('u')">↑</button>
+<button onclick="dir('l')">←</button>
+<button onclick="dir('d')">↓</button>
+<button onclick="dir('r')">→</button>
+<button onclick="reset()">Reset</button>
+</div>
+<script>
+const S=15,W=300,C=W/S;
+const cv=document.getElementById('cv'),x=cv.getContext('2d');
+let snake,dx,dy,food,score,alive,tick;
+let best=parseInt(localStorage.getItem('snakeBest')||'0');
+document.getElementById('best').textContent=best;
+function reset(){snake=[{x:10,y:10}];dx=0;dy=0;score=0;alive=true;
+  document.getElementById('score').textContent=0;
+  food={x:5,y:5};spawn();}
+function spawn(){do{food={x:Math.floor(Math.random()*C),y:Math.floor(Math.random()*C)}}while(snake.some(s=>s.x===food.x&&s.y===food.y))}
+function dir(d){if(!alive)return;
+  if(d==='u'&&dy!==1){dx=0;dy=-1}
+  if(d==='d'&&dy!==-1){dx=0;dy=1}
+  if(d==='l'&&dx!==1){dx=-1;dy=0}
+  if(d==='r'&&dx!==-1){dx=1;dy=0}}
+function step(){if(!alive)return;
+  if(dx===0&&dy===0){draw();return}
+  const h={x:snake[0].x+dx,y:snake[0].y+dy};
+  if(h.x<0||h.x>=C||h.y<0||h.y>=C||snake.some(s=>s.x===h.x&&s.y===h.y)){
+    alive=false;if(score>best){best=score;localStorage.setItem('snakeBest',best);document.getElementById('best').textContent=best}
+    return}
+  snake.unshift(h);
+  if(h.x===food.x&&h.y===food.y){score++;document.getElementById('score').textContent=score;spawn()}
+  else snake.pop();
+  draw();}
+function draw(){x.fillStyle='#16161e';x.fillRect(0,0,W,W);
+  x.fillStyle='#f7768e';x.beginPath();x.arc(food.x*S+S/2,food.y*S+S/2,S/2-2,0,Math.PI*2);x.fill();
+  snake.forEach((s,i)=>{x.fillStyle=i===0?'#a78bfa':'#7aa2f7';x.fillRect(s.x*S+1,s.y*S+1,S-2,S-2)});
+  if(!alive){x.fillStyle='rgba(0,0,0,.7)';x.fillRect(0,0,W,W);x.fillStyle='#f7768e';x.font='bold 24px system-ui';x.textAlign='center';x.fillText('GAME OVER',W/2,W/2-10);x.fillStyle='#9aa5ce';x.font='14px system-ui';x.fillText('Tap Reset untuk main lagi',W/2,W/2+20)}}
+document.addEventListener('keydown',e=>{
+  if(e.key==='ArrowUp')dir('u');if(e.key==='ArrowDown')dir('d');
+  if(e.key==='ArrowLeft')dir('l');if(e.key==='ArrowRight')dir('r')});
+reset();setInterval(step,120);
+</script></body></html>

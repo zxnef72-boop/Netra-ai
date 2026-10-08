@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Admin — Dashboard</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:'Inter',system-ui,sans-serif}
+:root{--bg:#0f172a;--sidebar:#1e293b;--card:#1e293b;--border:#334155;--text:#f1f5f9;--muted:#94a3b8;--primary:#3b82f6;--success:#10b981;--warning:#f59e0b;--danger:#ef4444}
+body{background:var(--bg);color:var(--text);display:flex;min-height:100vh}
+.sidebar{width:240px;background:var(--sidebar);border-right:1px solid var(--border);padding:24px 16px;display:flex;flex-direction:column;gap:8px}
+.brand{font-size:1.1rem;font-weight:800;padding:8px 12px;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+.brand-icon{width:32px;height:32px;background:linear-gradient(135deg,var(--primary),#8b5cf6);border-radius:8px;display:grid;place-items:center}
+.menu-item{padding:10px 12px;border-radius:8px;color:var(--muted);cursor:pointer;transition:.2s;display:flex;align-items:center;gap:10px;font-size:.9rem}
+.menu-item:hover{background:rgba(59,130,246,.1);color:var(--text)}
+.menu-item.active{background:var(--primary);color:#fff;font-weight:600}
+.menu-section{font-size:.7rem;text-transform:uppercase;letter-spacing:.1em;color:#475569;padding:16px 12px 8px;font-weight:700}
+.main{flex:1;padding:32px 40px;overflow-y:auto}
+.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:32px}
+.top h1{font-size:1.8rem;font-weight:800}
+.top p{color:var(--muted);font-size:.9rem;margin-top:4px}
+.user{display:flex;align-items:center;gap:12px;background:var(--card);padding:8px 16px 8px 8px;border-radius:12px;border:1px solid var(--border)}
+.user-avatar{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--primary),#8b5cf6);display:grid;place-items:center;font-weight:700}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:20px;margin-bottom:32px}
+.stat{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;position:relative;overflow:hidden}
+.stat::before{content:"";position:absolute;top:0;left:0;right:0;height:3px}
+.stat.blue::before{background:var(--primary)}
+.stat.green::before{background:var(--success)}
+.stat.yellow::before{background:var(--warning)}
+.stat.red::before{background:var(--danger)}
+.stat-label{color:var(--muted);font-size:.85rem;margin-bottom:8px}
+.stat-value{font-size:2rem;font-weight:800;letter-spacing:-.02em}
+.stat-change{font-size:.8rem;margin-top:8px;display:flex;align-items:center;gap:4px}
+.up{color:var(--success)}.down{color:var(--danger)}
+.row{display:grid;grid-template-columns:2fr 1fr;gap:20px;margin-bottom:24px}
+@media(max-width:900px){.row{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px}
+.card-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}
+.card-head h3{font-size:1.05rem;font-weight:700}
+.chart{display:flex;align-items:flex-end;gap:8px;height:180px;padding:16px 0}
+.bar{flex:1;background:linear-gradient(180deg,var(--primary),#1e40af);border-radius:6px 6px 0 0;transition:.3s;position:relative;min-height:8px}
+.bar:hover{opacity:.8}
+.bar-label{position:absolute;bottom:-22px;left:50%;transform:translateX(-50%);font-size:.75rem;color:var(--muted);white-space:nowrap}
+.bar-val{position:absolute;top:-22px;left:50%;transform:translateX(-50%);font-size:.75rem;font-weight:700;color:var(--text);white-space:nowrap}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;padding:12px;color:var(--muted);font-size:.8rem;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border);font-weight:600}
+td{padding:14px 12px;border-bottom:1px solid var(--border);font-size:.9rem}
+tr:hover td{background:rgba(59,130,246,.05)}
+.badge{display:inline-block;padding:4px 10px;border-radius:20px;font-size:.75rem;font-weight:600}
+.badge.ok{background:rgba(16,185,129,.15);color:var(--success)}
+.badge.pending{background:rgba(245,158,11,.15);color:var(--warning)}
+.badge.fail{background:rgba(239,68,68,.15);color:var(--danger)}
+.login-screen{position:fixed;inset:0;background:var(--bg);display:grid;place-items:center;z-index:1000;padding:24px}
+.login-screen.hide{display:none}
+.login-box{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:40px;width:100%;max-width:400px}
+.login-box h2{font-size:1.5rem;margin-bottom:8px}
+.login-box p{color:var(--muted);font-size:.9rem;margin-bottom:28px}
+.field{margin-bottom:16px}
+.field label{display:block;font-size:.85rem;color:var(--muted);margin-bottom:6px}
+.field input{width:100%;padding:12px 14px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);outline:none;font-size:.9rem;transition:.2s}
+.field input:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(59,130,246,.15)}
+.btn-login{width:100%;padding:14px;background:var(--primary);color:#fff;border:none;border-radius:12px;font-weight:700;cursor:pointer;font-size:1rem;transition:.2s;margin-top:8px}
+.btn-login:hover{background:#2563eb}
+.hint{text-align:center;font-size:.8rem;color:var(--muted);margin-top:16px;padding:10px;background:rgba(59,130,246,.1);border-radius:8px}
+@media(max-width:640px){.sidebar{position:fixed;left:-240px;top:0;bottom:0;z-index:99;transition:.3s}.main{padding:20px}}
+</style>
+</head>
+<body>
+
+<div class="login-screen" id="login">
+<div class="login-box">
+<h2>🔐 Admin Login</h2>
+<p>Masuk ke dashboard admin</p>
+<div class="field"><label>Email</label><input type="email" id="user" placeholder="admin@netra.local" value="admin@netra.local"></div>
+<div class="field"><label>Password</label><input type="password" id="pass" placeholder="password"></div>
+<button class="btn-login" onclick="login()">Masuk</button>
+<div class="hint">Demo: password apa aja bisa (untuk testing)</div>
+</div>
+</div>
+
+<div class="sidebar">
+<div class="brand"><div class="brand-icon">N</div>NetRa Admin</div>
+<div class="menu-section">Main</div>
+<div class="menu-item active">📊 Dashboard</div>
+<div class="menu-item">📦 Produk</div>
+<div class="menu-item">🛒 Pesanan</div>
+<div class="menu-item">👥 Pelanggan</div>
+<div class="menu-section">Sistem</div>
+<div class="menu-item">📈 Analytics</div>
+<div class="menu-item">⚙️ Settings</div>
+<div class="menu-item" onclick="logout()">🚪 Logout</div>
+</div>
+
+<div class="main">
+<div class="top">
+<div><h1>Dashboard</h1><p>Selamat datang kembali, Admin</p></div>
+<div class="user"><div class="user-avatar">A</div><div><div style="font-weight:600;font-size:.9rem">Anzar</div><div style="font-size:.75rem;color:var(--muted)">Super Admin</div></div></div>
+</div>
+
+<div class="stats">
+<div class="stat blue"><div class="stat-label">Total Pendapatan</div><div class="stat-value">Rp 48.2jt</div><div class="stat-change up">▲ 12.5% dari bulan lalu</div></div>
+<div class="stat green"><div class="stat-label">Total Pesanan</div><div class="stat-value">1,284</div><div class="stat-change up">▲ 8.2% dari bulan lalu</div></div>
+<div class="stat yellow"><div class="stat-label">Pelanggan Baru</div><div class="stat-value">328</div><div class="stat-change down">▼ 2.1% dari bulan lalu</div></div>
+<div class="stat red"><div class="stat-label">Pending Order</div><div class="stat-value">42</div><div class="stat-change up">▲ 5 lebih dari kemarin</div></div>
+</div>
+
+<div class="row">
+<div class="card">
+<div class="card-head"><h3>Penjualan Mingguan</h3><span style="color:var(--muted);font-size:.85rem">7 hari terakhir</span></div>
+<div class="chart">
+<div class="bar" style="height:40%"><span class="bar-val">2.1jt</span><span class="bar-label">Sen</span></div>
+<div class="bar" style="height:65%"><span class="bar-val">3.4jt</span><span class="bar-label">Sel</span></div>
+<div class="bar" style="height:55%"><span class="bar-val">2.9jt</span><span class="bar-label">Rab</span></div>
+<div class="bar" style="height:85%"><span class="bar-val">4.5jt</span><span class="bar-label">Kam</span></div>
+<div class="bar" style="height:70%"><span class="bar-val">3.7jt</span><span class="bar-label">Jum</span></div>
+<div class="bar" style="height:95%"><span class="bar-val">5.1jt</span><span class="bar-label">Sab</span></div>
+<div class="bar" style="height:75%"><span class="bar-val">4.0jt</span><span class="bar-label">Min</span></div>
+</div>
+</div>
+<div class="card">
+<div class="card-head"><h3>Aktivitas</h3></div>
+<div style="padding:8px 0;border-bottom:1px solid var(--border)"><div style="font-size:.9rem">🛒 Pesanan baru #1284</div><div style="font-size:.75rem;color:var(--muted)">5 menit lalu</div></div>
+<div style="padding:8px 0;border-bottom:1px solid var(--border)"><div style="font-size:.9rem">👤 Pelanggan baru daftar</div><div style="font-size:.75rem;color:var(--muted)">12 menit lalu</div></div>
+<div style="padding:8px 0;border-bottom:1px solid var(--border)"><div style="font-size:.9rem">💰 Pembayaran diterima</div><div style="font-size:.75rem;color:var(--muted)">28 menit lalu</div></div>
+<div style="padding:8px 0"><div style="font-size:.9rem">📦 Stok produk rendah</div><div style="font-size:.75rem;color:var(--muted)">1 jam lalu</div></div>
+</div>
+</div>
+
+<div class="card">
+<div class="card-head"><h3>Pesanan Terbaru</h3><span style="color:var(--primary);font-size:.85rem;cursor:pointer">Lihat semua →</span></div>
+<table>
+<thead><tr><th>ID</th><th>Pelanggan</th><th>Produk</th><th>Total</th><th>Status</th></tr></thead>
+<tbody>
+<tr><td>#1284</td><td>Budi Santoso</td><td>Kaos Premium Cotton</td><td>Rp 89.000</td><td><span class="badge ok">Selesai</span></td></tr>
+<tr><td>#1283</td><td>Siti Nurhaliza</td><td>Sepatu Sneakers Pro</td><td>Rp 459.000</td><td><span class="badge pending">Pending</span></td></tr>
+<tr><td>#1282</td><td>Agus Setiawan</td><td>Tas Ransel Waterproof</td><td>Rp 249.000</td><td><span class="badge ok">Selesai</span></td></tr>
+<tr><td>#1281</td><td>Rina Wati</td><td>Jam Tangan Digital</td><td>Rp 389.000</td><td><span class="badge fail">Batal</span></td></tr>
+<tr><td>#1280</td><td>Dedi Kurniawan</td><td>Hoodie Fleece Warm</td><td>Rp 219.000</td><td><span class="badge ok">Selesai</span></td></tr>
+</table>
+</div>
+
+</div>
+
+<script>
+function login(){
+  const p=document.getElementById('pass').value;
+  // Demo: password apapun works
+  localStorage.setItem('netra_admin_logged','1');
+  document.getElementById('login').classList.add('hide');
+}
+function logout(){
+  localStorage.removeItem('netra_admin_logged');
+  document.getElementById('login').classList.remove('hide');
+}
+if(localStorage.getItem('netra_admin_logged')==='1'){
+  document.getElementById('login').classList.add('hide');
+}
+</script>
+</body>
+</html>

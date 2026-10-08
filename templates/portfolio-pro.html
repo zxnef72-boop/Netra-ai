@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Anzar — Full-Stack Developer</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:'Inter',system-ui,sans-serif}
+:root{--bg:#0a0a0f;--card:#12121a;--border:#1f1f2e;--text:#e6e6ec;--muted:#8888a0;--accent:#a78bfa;--accent2:#7aa2f7}
+body{background:var(--bg);color:var(--text);line-height:1.6;overflow-x:hidden}
+a{color:inherit;text-decoration:none}
+.nav{position:fixed;top:0;left:0;right:0;padding:16px 24px;background:rgba(10,10,15,.85);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);z-index:100}
+.nav-in{max-width:1100px;margin:0 auto;display:flex;justify-content:space-between;align-items:center}
+.logo{font-weight:800;font-size:1.2rem;background:linear-gradient(90deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.nav-links{display:flex;gap:28px}
+.nav-links a{color:var(--muted);font-size:.9rem;transition:.2s}
+.nav-links a:hover{color:var(--accent)}
+.container{max-width:1100px;margin:0 auto;padding:0 24px}
+.hero{min-height:100vh;display:flex;flex-direction:column;justify-content:center;padding:120px 24px 80px;position:relative}
+.hero-in{max-width:1100px;margin:0 auto;width:100%}
+.hero-badge{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;background:rgba(167,139,250,.1);border:1px solid rgba(167,139,250,.3);border-radius:20px;font-size:.85rem;color:var(--accent);margin-bottom:24px}
+.hero-badge::before{content:"";width:6px;height:6px;background:#10b981;border-radius:50%;animation:pulse 2s infinite}
+@keyframes pulse{50%{opacity:.4}}
+.hero h1{font-size:clamp(2.5rem,6vw,4.5rem);font-weight:800;line-height:1.05;letter-spacing:-.03em;margin-bottom:24px}
+.hero h1 span{background:linear-gradient(90deg,var(--accent),var(--accent2),#ec4899);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.hero p{font-size:1.15rem;color:var(--muted);max-width:600px;margin-bottom:40px}
+.hero-cta{display:flex;gap:12px;flex-wrap:wrap}
+.btn{padding:14px 28px;border-radius:12px;font-weight:600;font-size:.95rem;transition:.2s;border:none;cursor:pointer;display:inline-flex;align-items:center;gap:8px}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-primary:hover{background:#8b5cf6;transform:translateY(-2px);box-shadow:0 10px 30px rgba(167,139,250,.3)}
+.btn-ghost{background:transparent;color:var(--text);border:1px solid var(--border)}
+.btn-ghost:hover{border-color:var(--accent);color:var(--accent)}
+section{padding:100px 0}
+.section-title{font-size:2rem;font-weight:800;margin-bottom:12px;letter-spacing:-.02em}
+.section-sub{color:var(--muted);margin-bottom:48px;font-size:1rem}
+.about-grid{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center}
+.avatar{width:100%;aspect-ratio:1;background:linear-gradient(135deg,var(--accent),var(--accent2));border-radius:24px;display:grid;place-items:center;font-size:8rem;font-weight:800;color:#fff;max-width:400px;position:relative;overflow:hidden}
+.avatar::before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 30% 30%,rgba(255,255,255,.3),transparent 60%)}
+.skills-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-top:24px}
+.skill{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;text-align:center;font-size:.9rem;transition:.2s}
+.skill:hover{border-color:var(--accent);transform:translateY(-4px)}
+.skill-icon{font-size:1.8rem;margin-bottom:6px;display:block}
+.projects{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:24px}
+.project{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:28px;transition:.3s;position:relative;overflow:hidden}
+.project::before{content:"";position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--accent),var(--accent2));opacity:0;transition:.3s}
+.project:hover{border-color:var(--accent);transform:translateY(-6px);box-shadow:0 20px 50px rgba(167,139,250,.15)}
+.project:hover::before{opacity:1}
+.project-icon{width:56px;height:56px;background:rgba(167,139,250,.1);border-radius:14px;display:grid;place-items:center;font-size:1.6rem;margin-bottom:20px}
+.project h3{font-size:1.25rem;font-weight:700;margin-bottom:10px}
+.project p{color:var(--muted);font-size:.9rem;margin-bottom:20px;line-height:1.6}
+.project-tags{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px}
+.tag{padding:4px 10px;background:rgba(122,162,247,.1);border:1px solid rgba(122,162,247,.2);border-radius:20px;font-size:.75rem;color:var(--accent2)}
+.project-link{color:var(--accent);font-size:.85rem;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.contact{text-align:center;background:var(--card);border:1px solid var(--border);border-radius:24px;padding:60px 32px;margin-top:24px}
+.contact h2{font-size:2rem;font-weight:800;margin-bottom:12px}
+.contact p{color:var(--muted);margin-bottom:32px}
+.contact-links{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+footer{border-top:1px solid var(--border);padding:40px 24px;text-align:center;color:var(--muted);font-size:.85rem}
+@media(max-width:768px){.about-grid{grid-template-columns:1fr}.nav-links{display:none}}
+</style>
+</head>
+<body>
+
+<nav class="nav"><div class="nav-in">
+<div class="logo">Anzar.dev</div>
+<div class="nav-links">
+<a href="#about">Tentang</a>
+<a href="#projects">Project</a>
+<a href="#contact">Kontak</a>
+</div>
+</div></nav>
+
+<section class="hero"><div class="hero-in">
+<div class="hero-badge">Tersedia untuk freelance</div>
+<h1>Halo, aku <span>Anzar</span>.<br>Full-Stack Developer.</h1>
+<p>Belajar coding otodidak dari HP Android. Bikin tools security, AI, dan web modern pakai Go, Lua, dan Python.</p>
+<div class="hero-cta">
+<button class="btn btn-primary" onclick="document.getElementById('projects').scrollIntoView({behavior:'smooth'})">Lihat Project →</button>
+<button class="btn btn-ghost" onclick="document.getElementById('contact').scrollIntoView({behavior:'smooth'})">Hubungi Saya</button>
+</div>
+</div></section>
+
+<section id="about"><div class="container">
+<div class="about-grid">
+<div class="avatar">A</div>
+<div>
+<h2 class="section-title">Tentang Saya</h2>
+<p style="color:var(--muted);margin-bottom:20px">21 tahun, kerja serabutan, belajar coding dari lapangan. Bukan dari kampus, tapi dari rasa penasaran dan konsistensi.</p>
+<p style="color:var(--muted);margin-bottom:24px">Fokus di backend, security research, dan developer tools. Bikin project open source dengan nama <strong style="color:var(--accent)">NeF Org</strong>.</p>
+<div class="skills-grid">
+<div class="skill"><span class="skill-icon">🐹</span>Go</div>
+<div class="skill"><span class="skill-icon">🌙</span>Lua</div>
+<div class="skill"><span class="skill-icon">🐍</span>Python</div>
+<div class="skill"><span class="skill-icon">🐧</span>Linux</div>
+<div class="skill"><span class="skill-icon">🔒</span>Security</div>
+<div class="skill"><span class="skill-icon">🌐</span>Networking</div>
+</div>
+</div>
+</div>
+</div></section>
+
+<section id="projects"><div class="container">
+<h2 class="section-title">Project Terbaru</h2>
+<p class="section-sub">Kumpulan project yang aku bikin dan maintain.</p>
+<div class="projects">
+
+<div class="project">
+<div class="project-icon">🛠️</div>
+<h3>Netra CLI</h3>
+<p>Toolkit OSINT & reconnaissance. 11 command: scan, dir enum, username check, phone, email, takeover detection.</p>
+<div class="project-tags"><span class="tag">Go</span><span class="tag">Security</span><span class="tag">CLI</span></div>
+<a href="#" class="project-link">Lihat project →</a>
+</div>
+
+<div class="project">
+<div class="project-icon">🤖</div>
+<h3>Netra AI</h3>
+<p>AI terminal multi-provider dengan TUI ala Claude Code. Support OpenRouter, Groq, Gemini, Inception, Ollama.</p>
+<div class="project-tags"><span class="tag">Go</span><span class="tag">AI</span><span class="tag">TUI</span></div>
+<a href="#" class="project-link">Lihat project →</a>
+</div>
+
+<div class="project">
+<div class="project-icon">✈️</div>
+<h3>Netra Flight</h3>
+<p>Game aerial combat 3D-ish pake Lua + Love2D. Custom rendering engine dari 2D primitives.</p>
+<div class="project-tags"><span class="tag">Lua</span><span class="tag">Love2D</span><span class="tag">Game</span></div>
+<a href="#" class="project-link">Lihat project →</a>
+</div>
+
+<div class="project">
+<div class="project-icon">📝</div>
+<h3>NetRa Lab</h3>
+<p>Server vulnerable buat latihan security. Flask + admin panel + intentional vulnerabilities.</p>
+<div class="project-tags"><span class="tag">Python</span><span class="tag">Flask</span><span class="tag">Education</span></div>
+<a href="#" class="project-link">Lihat project →</a>
+</div>
+
+</div>
+</div></section>
+
+<section id="contact"><div class="container">
+<div class="contact">
+<h2>Mari Bekerja Sama</h2>
+<p>Punya project atau ide? Aku siap bantu.</p>
+<div class="contact-links">
+<a href="mailto:anzar@netra.dev" class="btn btn-primary">📧 Email</a>
+<a href="#" class="btn btn-ghost">💬 WhatsApp</a>
+<a href="#" class="btn btn-ghost">🐙 GitHub</a>
+</div>
+</div>
+</div></section>
+
+<footer>© 2026 Anzar — Dibuat dari Termux, HP Realme C63. Made with ❤ in Indonesia.</footer>
+
+</body>
+</html>

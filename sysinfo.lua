@@ -1,0 +1,8 @@
+print("=== System Info ===")
+print("Waktu : " .. os.date("%Y-%m-%d %H:%M:%S"))
+print("CWD   : " .. cwd)
+print("Date  : " .. os.date("%A, %d %B %Y"))
+print("TZ    : " .. (get_env("TZ") ~= "" and get_env("TZ") or "default"))
+print("HOME  : " .. (get_env("HOME") ~= "" and get_env("HOME") or "-"))
+print("USER  : " .. (get_env("USER") ~= "" and get_env("USER") or "-"))
+print("Shell : " .. (get_env("SHELL") ~= "" and get_env("SHELL") or "-"))

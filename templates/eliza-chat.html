@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="id"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Eliza Chat</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:system-ui,sans-serif}
+body{background:#0a0a10;color:#e6e6ec;min-height:100vh;display:flex;justify-content:center;align-items:center;padding:20px}
+.chat{width:100%;max-width:460px;background:#16161e;border:1px solid #2a2a3a;border-radius:16px;display:flex;flex-direction:column;height:600px}
+.head{padding:14px 18px;background:#1a1a24;border-bottom:1px solid #2a2a3a;display:flex;align-items:center;gap:10px}
+.dot{width:10px;height:10px;background:#9ece6a;border-radius:50%}
+.head h1{font-size:1rem;color:#c0caf5}
+.head .sub{font-size:.75rem;color:#565f89;margin-left:auto}
+.body{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:12px}
+.msg{max-width:80%;padding:10px 14px;border-radius:12px;font-size:.9rem;line-height:1.5;word-wrap:break-word;white-space:pre-wrap}
+.msg.user{align-self:flex-end;background:#a78bfa;color:#fff;border-bottom-right-radius:4px}
+.msg.eliza{align-self:flex-start;background:#1a1a24;color:#c0caf5;border-bottom-left-radius:4px}
+.input{padding:12px;border-top:1px solid #2a2a3a;display:flex;gap:8px}
+input{flex:1;background:#0a0a10;border:1px solid #2a2a3a;border-radius:8px;padding:12px 14px;color:#e6e6ec;outline:none;font-size:.9rem}
+input:focus{border-color:#a78bfa}
+button{background:#a78bfa;color:#fff;border:none;border-radius:8px;padding:0 20px;font-weight:600;cursor:pointer}
+</style></head><body>
+<div class="chat">
+<div class="head"><span class="dot"></span><h1>Eliza</h1><span class="sub">1966 · if-else</span></div>
+<div class="body" id="body"></div>
+<div class="input"><input id="inp" placeholder="Ketik pesan..." autofocus><button onclick="send()">➤</button></div>
+</div>
+<script>
+const rules=[
+[/halo|hai|hey/i,["Halo. Ada yang mau kamu ceritakan?","Hai. Gimana perasaanmu hari ini?"]],
+[/saya (sedih|galau|stress|capek|lelah)/i,["Kenapa kamu $1? Ceritakan lebih lanjut.","Sejak kapan kamu merasa $1?"]],
+[/saya (senang|bahagia|happy|semangat)/i,["Bagus! Apa yang bikin kamu $1?","Ceritakan lebih banyak."]],
+[/saya (takut|cemas|khawatir)/i,["Apa yang membuatmu $1?","Coba jelaskan perasaan $1 itu."]],
+[/saya (butuh|ingin|pengen|mau) (.+)/i,["Kenapa kamu butuh $2?","Apa yang terjadi kalo gak dapet $2?"]],
+[/kamu siapa|siapa kamu/i,["Aku ELIZA, program sederhana dari 1966.","Aku cuma if-else. Tapi kamu siapa?"]],
+[/nama saya (.+)/i,["Halo $1! Senang kenalan.","Salam kenal, $1."]],
+[/ibu|ayah|orang ?tua|keluarga/i,["Ceritakan lebih soal keluargamu.","Hubunganmu sama mereka gimana?"]],
+[/teman|sahabat|kawan/i,["Temanmu penting ya. Gimana hubungan kalian?"]],
+[/kerja|kantor|boss/i,["Gimana perasaanmu soal pekerjaanmu?"]],
+[/cinta|pacar|gebetan/i,["Ceritakan soal perasaanmu."]],
+[/^(iya|ya|yap|yes)$/i,["Oh gitu. Lanjutkan...","Menarik. Ceritakan lebih."]],
+[/^(tidak|gak|nggak|no)$/i,["Kenapa tidak?","Coba jelaskan."]],
+[/kenapa/i,["Kenapa menurutmu?","Apa penyebabnya?"]],
+];
+const fb=["Ceritakan lebih lanjut.","Hmm, menarik. Terus gimana?","Apa yang kamu rasain soal itu?","Bisa jelaskan lebih detail?","Gimana perasaanmu sekarang?"];
+function reply(t){for(const[p,r]of rules){const m=t.match(p);if(m){let x=r[Math.floor(Math.random()*r.length)];return x.replace(/\$(\d)/g,(_,n)=>m[+n]||'')}}return fb[Math.floor(Math.random()*fb.length)]}
+const $=id=>document.getElementById(id);
+function add(c,t){const d=document.createElement('div');d.className='msg '+c;d.textContent=t;$('body').appendChild(d);$('body').scrollTop=$('body').scrollHeight}
+function send(){const v=$('inp').value.trim();if(!v)return;$('inp').value='';add('user',v);setTimeout(()=>add('eliza',reply(v)),400)}
+$('inp').addEventListener('keypress',e=>{if(e.key==='Enter')send()});
+add('eliza','Halo. Aku ELIZA, program sederhana dari 1966. Ceritakan apa aja.');
+</script></body></html>
