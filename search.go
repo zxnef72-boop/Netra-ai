@@ -21,8 +21,8 @@ type searchResult struct {
 
 var (
 	// Lite endpoint pakai <a class="result-link"> bukan <a class="result__a">
-	reDDGResult  = regexp.MustCompile(`(?s)<a[^>]+class="result-link"[^>]+href="([^"]+)"[^>]*>(.*?)</a>`)
-	reDDGSnippet = regexp.MustCompile(`(?s)<td[^>]*class="result-snippet"[^>]*>(.*?)</td>`)
+	reDDGResult  = regexp.MustCompile(`(?s)<a[^>]+href="([^"]+)"[^>]+class=['"]result-link['"][^>]*>(.*?)</a>`)
+	reDDGSnippet = regexp.MustCompile(`(?s)<td[^>]+class=['"]result-snippet['"][^>]*>(.*?)</td>`)
 	reSearchTag  = regexp.MustCompile(`<[^>]+>`)
 	reEntities   = strings.NewReplacer(
 		"&amp;", "&", "&lt;", "<", "&gt;", ">",

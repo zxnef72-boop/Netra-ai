@@ -876,6 +876,7 @@ func shouldSearch(input string) bool {
 		"berapa", "apa sih", "apa yg", "apa yang",
 		"cari di", "search", "googling", "google",
 		"kasih tau info", "informasi tentang",
+		"cara ", "gimana ", "bagaimana ", "tutorial ",
 		"berita", "harga",
 		"belajar",
 	}

@@ -91,7 +91,8 @@ func loadConfig() (*Config, error) {
 		return nil, err
 	}
 	// providers kosong = Eliza offline mode
-	if cfg.ActiveProvider < 0 || cfg.ActiveProvider >= len(cfg.Providers) {
+	// -1 = eliza-1966 (offline). Jangan override.
+	if cfg.ActiveProvider >= len(cfg.Providers) {
 		cfg.ActiveProvider = 0
 	}
 	return &cfg, nil

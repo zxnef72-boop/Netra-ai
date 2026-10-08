@@ -344,6 +344,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					// User pakai /ask — baru route ke AI
 					ch := make(chan StreamChunk, 64)
 					m.streamCh = ch
+					m.messages = append(m.messages, ChatMsg{Role: "assistant", Text: ""})
 					go streamChat(m.provider, history, ch)
 					return m, waitForChunk(ch)
 				}
