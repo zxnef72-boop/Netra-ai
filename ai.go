@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -45,8 +46,33 @@ type ChatRequest struct {
 	MaxTokens int       `json:"max_tokens,omitempty"`
 }
 
+// configPath — cari config.json di beberapa lokasi:
+// 1) current dir, 2) ~/.netra-ai/, 3) sebelah binary
+func configPath() string {
+	if _, err := os.Stat("config.json"); err == nil {
+		return "config.json"
+	}
+	home, _ := os.UserHomeDir()
+	p := filepath.Join(home, ".netra-ai", "config.json")
+	if _, err := os.Stat(p); err == nil {
+		return p
+	}
+	// Fallback: cwd (nanti auto-create)
+	return "config.json"
+}
+
+func configSavePath() string {
+	if _, err := os.Stat("config.json"); err == nil {
+		return "config.json"
+	}
+	home, _ := os.UserHomeDir()
+	dir := filepath.Join(home, ".netra-ai")
+	os.MkdirAll(dir, 0755)
+	return filepath.Join(dir, "config.json")
+}
+
 func loadConfig() (*Config, error) {
-	data, err := os.ReadFile("config.json")
+	data, err := os.ReadFile(configPath())
 	if err != nil {
 		return nil, fmt.Errorf("config.json: %w", err)
 	}
@@ -63,7 +89,7 @@ func loadConfig() (*Config, error) {
 
 func (c *Config) Save() error {
 	data, _ := json.MarshalIndent(c, "", "  ")
-	return os.WriteFile("config.json", data, 0600)
+	return os.WriteFile(configSavePath(), data, 0600)
 }
 
 type StreamChunk struct {
