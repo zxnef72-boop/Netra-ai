@@ -449,7 +449,7 @@ func elizaReplyCore(input string) string {
 	}
 
 	// Cek trigger search — pakai fungsi shouldSearch yang lengkap
-	hasSearchTrigger := shouldSearch(input)
+	hasSearchTrigger := false // DISABLED: Eliza prioritas, search cuma /search
 	// Kalau input diawali "baca"/"read", jangan ke-trigger search
 	inputLowCheck := strings.ToLower(strings.TrimSpace(input))
 	if strings.HasPrefix(inputLowCheck, "baca ") || strings.HasPrefix(inputLowCheck, "read ") {
@@ -871,13 +871,11 @@ func shouldSearch(input string) bool {
 	// === WAJIB: harus ada trigger PENCARIAN ===
 	// Kalo gak ada trigger, gak search — biar Eliza fallback aja
 	searchTriggers := []string{
-		"cara", "gimana", "bagaimana", "apa itu", "apakah",
+		"apa itu", "apakah", "yang mana",
 		"kenapa", "mengapa", "kapan", "dimana", "di mana",
-		"siapa", "berapa", "yang mana",
-		"apa sih", "apa yg", "apa yang",
-		"tutorial", "panduan", "resep", "cari", "carikan",
-		"jelaskan", "jelasin", "contoh", "kasih tau",
-		"bantu", "tolong", "info", "informasi",
+		"berapa", "apa sih", "apa yg", "apa yang",
+		"cari di", "search", "googling", "google",
+		"kasih tau info", "informasi tentang",
 		"berita", "harga",
 		"belajar",
 	}

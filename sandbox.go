@@ -1,9 +1,7 @@
-// sandbox.go — jalanin command di environment terisolasi.
-// Deteksi OS otomatis:
-//   - Termux (Android) -> proot-distro
-//   - Linux            -> docker (kalau ada), fallback shell
-//   - Windows          -> WSL (kalau ada), fallback cmd
-//   - macOS            -> docker (kalau ada), fallback shell
+// sandbox.go — sandbox jujur.
+// Kalau ada proot-distro + distro, pakai itu (isolasi penuh).
+// Kalau gak ada, pakai sandbox logis (cwd dikurung, BUKAN isolasi).
+// Header selalu bilang jujur level isolasinya.
 package main
 
 import (
@@ -17,114 +15,153 @@ import (
 	"time"
 )
 
-const sandboxDistro = "netra-sandbox"
 const sandboxTimeout = 60 * time.Second
 
-// isTermux — cek apakah lagi jalan di Termux (Android).
-func isTermux() bool {
+// deteksi distro proot yang tersedia (prioritas: alpine > debian > netra-sandbox > kali)
+func detectProotDistro() string {
+	if !hasCommand("proot-distro") {
+		return ""
+	}
+	// Cek folder installed-rootfs langsung (lebih reliable dari parsing output)
 	prefix := os.Getenv("PREFIX")
-	if strings.Contains(prefix, "com.termux") {
-		return true
+	if prefix == "" {
+		prefix = "/data/data/com.termux/files/usr"
 	}
-	// Cek juga file marker proot-distro
-	if _, err := os.Stat("/data/data/com.termux/files/usr/bin/proot-distro"); err == nil {
-		return true
+	rootfsDir := filepath.Join(prefix, "var", "lib", "proot-distro", "containers")
+	prioritas := []string{"alpine", "debian", "netra-sandbox", "kali", "ubuntu"}
+	for _, d := range prioritas {
+		if _, err := os.Stat(filepath.Join(rootfsDir, d)); err == nil {
+			return d
+		}
 	}
-	return false
+	// Fallback: parsing output (kalau folder gak ada)
+	out, err := exec.Command("proot-distro", "list").Output()
+	if err != nil {
+		return ""
+	}
+	installed := string(out)
+	for _, d := range prioritas {
+		if strings.Contains(installed, d) {
+			return d
+		}
+	}
+	return ""
 }
 
-// hasCommand — cek apakah command ada di PATH.
+func isTermux() bool {
+	prefix := os.Getenv("PREFIX")
+	return strings.Contains(prefix, "com.termux")
+}
+
 func hasCommand(name string) bool {
 	_, err := exec.LookPath(name)
 	return err == nil
 }
 
-// sandboxBackend — return (nama backend, args-template, deskripsi).
-// Args-template dipanggil dengan args[0]=script.
-func sandboxBackend(script string) (string, []string, string, error) {
-	// 1. Termux -> proot-distro
+// sandboxBackend — return (bin, args, deskripsi, isolasi)
+func sandboxBackend(script string) (string, []string, string, string) {
+	// 1. Termux + proot-distro
 	if isTermux() {
-		if hasCommand("proot-distro") {
+		if distro := detectProotDistro(); distro != "" {
 			return "proot-distro",
-				[]string{"login", sandboxDistro, "--", "bash", "-c", script},
-				"Kali (proot-distro)", nil
+				[]string{"login", distro, "--", "bash", "-c", script},
+				"proot: " + distro,
+				"penuh"
 		}
-		return "", nil, "", fmt.Errorf("proot-distro gak ketemu. Install: pkg install proot-distro")
 	}
 
-	// 2. Windows -> WSL
+	// 2. Windows + WSL
 	if runtime.GOOS == "windows" {
 		if hasCommand("wsl") {
 			return "wsl",
 				[]string{"bash", "-c", script},
-				"WSL (Windows Subsystem Linux)", nil
+				"WSL",
+				"penuh"
 		}
-		// Fallback: cmd.exe
-		if hasCommand("cmd") {
-			return "cmd",
-				[]string{"/C", script},
-				"cmd.exe (no isolasi)", nil
-		}
-		return "", nil, "", fmt.Errorf("gak ada WSL atau cmd.exe")
+		return "cmd",
+			[]string{"/C", script},
+			"cmd.exe",
+			"tidak ada"
 	}
 
-	// 3. Linux/macOS -> docker
+	// 3. Linux/macOS + docker
 	if hasCommand("docker") {
-		// Cek docker daemon jalan gak
 		check := exec.Command("docker", "info")
 		if err := check.Run(); err == nil {
 			return "docker",
-				[]string{"run", "--rm", "kalilinux/kali-rolling", "bash", "-c", script},
-				"Docker (kalilinux/kali-rolling)", nil
+				[]string{"run", "--rm", "alpine", "sh", "-c", script},
+				"Docker alpine",
+				"penuh"
 		}
 	}
 
-	// 4. Fallback: shell biasa
-	shell := "/bin/bash"
-	if runtime.GOOS == "darwin" {
-		shell = "/bin/zsh"
-	}
-	if _, err := os.Stat(shell); err != nil {
-		shell = "/bin/sh"
-	}
-	return shell,
-		[]string{"-c", script},
-		"host shell (no isolasi)", nil
+	// 4. Fallback: sandbox logis (murni Go, cwd dikurung)
+	return "", nil, "logis (cwd dikurung)", "tidak ada"
 }
 
-// cmdSandboxRun — jalanin perintah shell di environment terisolasi.
-func cmdSandboxRun(script string) (string, error) {
-	var log strings.Builder
+// runLogis — sandbox logis tanpa proot/docker.
+// Cwd dikurung di ~/.netra-ai/sandbox/, tapi command tetap bisa akses sistem.
+func runLogis(script string) string {
+	home, _ := os.UserHomeDir()
+	sandboxDir := filepath.Join(home, ".netra-ai", "sandbox")
+	os.MkdirAll(sandboxDir, 0755)
 
+	shell := "/bin/sh"
+	if isTermux() {
+		shell = "/data/data/com.termux/files/usr/bin/bash"
+	}
+	if _, err := os.Stat(shell); err != nil {
+		shell = "sh"
+	}
+
+	c := exec.Command(shell, "-c", script)
+	c.Dir = sandboxDir
+	c.Env = []string{
+		"HOME=" + sandboxDir,
+		"PATH=" + os.Getenv("PATH"),
+		"TERM=xterm",
+	}
+	out, _ := c.CombinedOutput()
+	return string(out)
+}
+
+func cmdSandboxRun(script string) (string, error) {
 	script = strings.TrimSpace(script)
 	if script == "" {
 		return "", fmt.Errorf("pakai: /sandbox <command>")
 	}
 
-	// Pilih backend sesuai OS
-	bin, args, desc, err := sandboxBackend(script)
-	if err != nil {
-		return "", err
-	}
+	bin, args, desc, isolasi := sandboxBackend(script)
 
+	var log strings.Builder
 	log.WriteString("**Sandbox Run**\n\n")
-	log.WriteString(fmt.Sprintf("Backend: `%s`\n", desc))
-	log.WriteString(fmt.Sprintf("Command: `%s`\n\n", script))
+	log.WriteString(fmt.Sprintf("Backend : `%s`\n", desc))
+	log.WriteString(fmt.Sprintf("Isolasi : `%s`\n", isolasi))
+	if isolasi == "tidak ada" {
+		log.WriteString("_Catatan: cwd dikurung, tapi command tetap bisa akses sistem._\n")
+	}
+	log.WriteString(fmt.Sprintf("Command : `%s`\n\n", script))
 	log.WriteString("```\n")
 
-	ctx, cancel := context.WithTimeout(context.Background(), sandboxTimeout)
-	defer cancel()
+	var output string
+	var runErr error
 
-	cmd := exec.CommandContext(ctx, bin, args...)
-	out, runErr := cmd.CombinedOutput()
-
-	if ctx.Err() == context.DeadlineExceeded {
-		log.WriteString("[TIMEOUT: >60s, proses dihentikan]\n")
-		log.WriteString("```\n")
-		return log.String(), fmt.Errorf("timeout 60 detik")
+	if bin == "" {
+		// Sandbox logis
+		output = runLogis(script)
+	} else {
+		ctx, cancel := context.WithTimeout(context.Background(), sandboxTimeout)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, bin, args...)
+		out, err := cmd.CombinedOutput()
+		output = string(out)
+		runErr = err
+		if ctx.Err() == context.DeadlineExceeded {
+			log.WriteString("[TIMEOUT: >60s]\n```\n")
+			return log.String(), fmt.Errorf("timeout")
+		}
 	}
 
-	output := string(out)
 	if output == "" {
 		output = "(tidak ada output)\n"
 	}
@@ -138,12 +175,6 @@ func cmdSandboxRun(script string) (string, error) {
 		log.WriteString("\nExit code: non-zero\n")
 		return log.String(), runErr
 	}
-
 	log.WriteString("\nSelesai\n")
 	return log.String(), nil
-}
-
-// pathJoinSafe — helper path portable (dipakai file lain juga).
-func pathJoinSafe(parts ...string) string {
-	return filepath.Join(parts...)
 }
