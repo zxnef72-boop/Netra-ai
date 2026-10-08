@@ -187,8 +187,7 @@ func packageAPKWithAssets(cfg apkConfig) error {
 	)
 	out1, err := cmd1.CombinedOutput()
 	if err != nil {
-		fmt.Println(string(out1))
-		return err
+		return fmt.Errorf("aapt package: %v\n%s", err, string(out1))
 	}
 
 	// Step 2: aapt add classes.dex

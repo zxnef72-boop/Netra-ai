@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -118,6 +119,172 @@ func (m *Model) handleLua(args []string) {
 		L.Push(lua.LString(string(d)))
 		L.Push(lua.LNil)
 		return 2
+	}))
+
+	// http_status_many — cek status HTTP paralel (max 25 concurrent).
+	// Input: table of URLs. Output: table of status codes (0=error).
+	L.SetGlobal("http_status_many", L.NewFunction(func(L *lua.LState) int {
+		urlsTable := L.CheckTable(1)
+		var urls []string
+		urlsTable.ForEach(func(_, v lua.LValue) {
+			urls = append(urls, v.String())
+		})
+
+		results := make([]int, len(urls))
+		var wg sync.WaitGroup
+		sem := make(chan struct{}, 25)
+		client := &http.Client{Timeout: 12 * time.Second}
+
+		for i, u := range urls {
+			wg.Add(1)
+			go func(i int, u string) {
+				defer wg.Done()
+				sem <- struct{}{}
+				defer func() { <-sem }()
+
+				req, err := http.NewRequest("GET", u, nil)
+				if err != nil {
+					results[i] = 0
+					return
+				}
+				req.Header.Set("User-Agent", "Mozilla/5.0 (Linux; Android 13; SM-S908B) AppleWebKit/537.36")
+				resp, err := client.Do(req)
+				if err != nil {
+					results[i] = 0
+					return
+				}
+				defer resp.Body.Close()
+				io.Copy(io.Discard, resp.Body)
+				results[i] = resp.StatusCode
+			}(i, u)
+		}
+		wg.Wait()
+
+		tbl := L.NewTable()
+		for i, s := range results {
+			tbl.RawSetInt(i+1, lua.LNumber(s))
+		}
+		L.Push(tbl)
+		return 1
+	}))
+
+	// http_probe_many — cek HTTP paralel, return status + title + size.
+	L.SetGlobal("http_probe_many", L.NewFunction(func(L *lua.LState) int {
+		urlsTable := L.CheckTable(1)
+		var urls []string
+		urlsTable.ForEach(func(_, v lua.LValue) {
+			urls = append(urls, v.String())
+		})
+
+		type Probe struct {
+			Status  int
+			Title   string
+			OgTitle string
+			Size    int
+			NegHits int
+		}
+		results := make([]Probe, len(urls))
+		var wg sync.WaitGroup
+		sem := make(chan struct{}, 20)
+		client := &http.Client{Timeout: 15 * time.Second}
+		titleRe := regexp.MustCompile(`(?is)<title[^>]*>(.*?)</title>`)
+		tagRe := regexp.MustCompile(`<[^>]+>`)
+		ogRe := regexp.MustCompile(`(?is)<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']`)
+		ogRe2 := regexp.MustCompile(`(?is)<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:title["']`)
+
+		negWords := []string{
+			"user not found",
+			"page not found",
+			"profile not found",
+			"account not found",
+			"not found",
+			"doesn't exist",
+			"does not exist",
+			"page doesn't exist",
+			"page unavailable",
+			"sorry, this page",
+			"no such user",
+			"no user",
+			"user doesn't exist",
+			"account suspended",
+			"profile unavailable",
+			"this account doesn't exist",
+		}
+
+		for i, u := range urls {
+			wg.Add(1)
+			go func(i int, u string) {
+				defer wg.Done()
+				sem <- struct{}{}
+				defer func() { <-sem }()
+
+				req, err := http.NewRequest("GET", u, nil)
+				if err != nil {
+					results[i] = Probe{Status: 0}
+					return
+				}
+				req.Header.Set("User-Agent", "Mozilla/5.0 (Linux; Android 13; SM-S908B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36")
+				req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+				req.Header.Set("Accept-Language", "en-US,en;q=0.9,id;q=0.8")
+
+				resp, err := client.Do(req)
+				if err != nil {
+					results[i] = Probe{Status: 0}
+					return
+				}
+				defer resp.Body.Close()
+
+				body, _ := io.ReadAll(io.LimitReader(resp.Body, 100*1024))
+				title := ""
+				if m := titleRe.FindSubmatch(body); len(m) > 1 {
+					t := tagRe.ReplaceAllString(string(m[1]), "")
+					t = strings.TrimSpace(t)
+					t = strings.ReplaceAll(t, "&amp;", "&")
+					t = strings.ReplaceAll(t, "&#39;", "'")
+					t = strings.ReplaceAll(t, "&quot;", "\"")
+					t = strings.ReplaceAll(t, "&lt;", "<")
+					t = strings.ReplaceAll(t, "&gt;", ">")
+					if len(t) > 200 {
+						t = t[:200]
+					}
+					title = t
+				}
+				ogTitle := ""
+				if m := ogRe.FindSubmatch(body); len(m) > 1 {
+					ogTitle = strings.TrimSpace(string(m[1]))
+				} else if m := ogRe2.FindSubmatch(body); len(m) > 1 {
+					ogTitle = strings.TrimSpace(string(m[1]))
+				}
+				lowBody := strings.ToLower(string(body))
+				negHits := 0
+				for _, w := range negWords {
+					if strings.Contains(lowBody, w) {
+						negHits++
+					}
+				}
+				results[i] = Probe{
+					Status:  resp.StatusCode,
+					Title:   title,
+					OgTitle: ogTitle,
+					Size:    len(body),
+					NegHits: negHits,
+				}
+			}(i, u)
+		}
+		wg.Wait()
+
+		tbl := L.NewTable()
+		for i, r := range results {
+			item := L.NewTable()
+			item.RawSetString("status", lua.LNumber(r.Status))
+			item.RawSetString("title", lua.LString(r.Title))
+			item.RawSetString("og_title", lua.LString(r.OgTitle))
+			item.RawSetString("size", lua.LNumber(r.Size))
+			item.RawSetString("neg_hits", lua.LNumber(r.NegHits))
+			tbl.RawSetInt(i+1, item)
+		}
+		L.Push(tbl)
+		return 1
 	}))
 
 	// ===== TCP SOCKET functions (buat port scan / banner grab) =====

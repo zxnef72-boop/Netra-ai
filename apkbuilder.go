@@ -123,6 +123,7 @@ func prepareWorkdir(cfg apkConfig) error {
 		filepath.Join(cfg.WorkDir, "src", pkgPath),
 		filepath.Join(cfg.WorkDir, "classes"),
 		filepath.Join(cfg.WorkDir, "res", "values"),
+		filepath.Join(cfg.WorkDir, "res", "xml"),
 		filepath.Join(cfg.WorkDir, "res", "mipmap-mdpi"),
 		filepath.Join(cfg.WorkDir, "res", "mipmap-hdpi"),
 		filepath.Join(cfg.WorkDir, "res", "mipmap-xhdpi"),
@@ -538,7 +539,17 @@ func writeManifest(cfg apkConfig) error {
 }
 
 func writeStyles(cfg apkConfig) error {
-	return nil // placeholder, gak butuh style sekarang
+	// Bikin network_security_config.xml biar WebView boleh akses 127.0.0.1
+	nsc := `<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">127.0.0.1</domain>
+        <domain includeSubdomains="true">localhost</domain>
+    </domain-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>
+`
+	return os.WriteFile(filepath.Join(cfg.WorkDir, "res", "xml", "network_security_config.xml"), []byte(nsc), 0644)
 }
 
 func compileJava(cfg apkConfig) error {
@@ -600,8 +611,7 @@ func packageAPK(cfg apkConfig) error {
 	)
 	out, err := cmd1.CombinedOutput()
 	if err != nil {
-		_ = out
-		return err
+		return fmt.Errorf("aapt package: %v\n%s", err, string(out))
 	}
 
 	// Step 2: aapt add (tambahin classes.dex)
@@ -609,8 +619,7 @@ func packageAPK(cfg apkConfig) error {
 	cmd2.Dir = cfg.WorkDir
 	out2, err := cmd2.CombinedOutput()
 	if err != nil {
-		_ = out2
-		return err
+		return fmt.Errorf("aapt add: %v\n%s", err, string(out2))
 	}
 	return nil
 }
