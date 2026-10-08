@@ -72,9 +72,19 @@ func configSavePath() string {
 }
 
 func loadConfig() (*Config, error) {
-	data, err := os.ReadFile(configPath())
+	p := configPath()
+	data, err := os.ReadFile(p)
 	if err != nil {
-		return nil, fmt.Errorf("config.json: %w", err)
+		// Auto-create config default kalau belum ada
+		def := &Config{
+			Providers:      []Provider{},
+			ActiveProvider: -1,
+		}
+		out, _ := json.MarshalIndent(def, "", "  ")
+		saveP := configSavePath()
+		os.MkdirAll(filepath.Dir(saveP), 0755)
+		os.WriteFile(saveP, out, 0600)
+		return def, nil
 	}
 	var cfg Config
 	if err := json.Unmarshal(data, &cfg); err != nil {
