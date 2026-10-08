@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -53,6 +54,7 @@ func detectMood(text string) string {
 // ===== REFLECTIVE PREFIX =====
 // Kadang-kadang tambah acknowledgment sebelum pertanyaan, biar lebih natural
 var lastMoodSet time.Time
+var lastSearchResults []searchResult
 
 var moodAcks = map[string][]string{
 	"sedih":  {"Aku dengerin kok.", "Hmm, berat ya.", "Gapapa, ceritain aja.", "Aku ngerti itu gak enak.", "Kedengeran berat."},
@@ -575,6 +577,39 @@ func elizaReplyCore(input string) string {
 
 	// Detect URL → tawarin baca
 	// Detect "baca" / "read" — support file lokal + URL
+	// === BACA HASIL SEARCH (angka) ===
+	if strings.HasPrefix(lowText, "baca ") {
+		rest := strings.TrimSpace(input[5:])
+		if n, err := strconv.Atoi(rest); err == nil {
+			if len(lastSearchResults) == 0 {
+				return "Belum ada hasil search. Coba cari dulu (ketik: cara X / apa itu X)."
+			}
+			if n < 1 || n > len(lastSearchResults) {
+				return fmt.Sprintf("Nomor %d gak ada. Hasil search cuma %d.", n, len(lastSearchResults))
+			}
+			r := lastSearchResults[n-1]
+			title, content, ferr := fetchURL(r.URL)
+			if ferr != nil {
+				return fmt.Sprintf("Gagal fetch %s: %v", r.URL, ferr)
+			}
+			maxLen := 2500
+			truncated := false
+			if len(content) > maxLen {
+				content = content[:maxLen]
+				truncated = true
+			}
+			out := ""
+			if title != "" {
+				out = "**" + title + "**\n\n"
+			}
+			out += "```\n" + content
+			if truncated {
+				out += "\n\n... (kepotong)"
+			}
+			out += "\n```\n\n_Sumber: " + r.URL + "_"
+			return out
+		}
+	}
 	if strings.HasPrefix(lowText, "baca ") || strings.HasPrefix(lowText, "read ") {
 		arg := strings.TrimSpace(input[5:])
 		if arg == "" {
@@ -647,6 +682,16 @@ func elizaReplyCore(input string) string {
 	}
 
 	// Cek rules
+	// Kalau ada trigger search eksplisit, langsung search (skip rules)
+	if strings.HasPrefix(lowText, "cara ") ||
+		strings.HasPrefix(lowText, "gimana ") ||
+		strings.HasPrefix(lowText, "bagaimana ") ||
+		strings.HasPrefix(lowText, "apa itu ") ||
+		strings.HasPrefix(lowText, "tutorial ") {
+		if reply, ok := trySearchOnly(lowText); ok {
+			return reply
+		}
+	}
 	for _, r := range elizaRules {
 		if r.pattern.MatchString(text) {
 			// Set topic
@@ -802,6 +847,7 @@ func elizaReplyCore(input string) string {
 		if len(results) == 0 {
 			return "Gak nemu hasil informatif di web."
 		}
+		lastSearchResults = results
 		return formatSearchResults(results, input)
 	}
 
@@ -824,6 +870,34 @@ func elizaReplyCore(input string) string {
 
 // shouldSearch — cek apakah input layak di-search.
 // Prinsip: cari web CUMA kalo user explicitly minta info/fakta.
+// trySearchOnly — paksa search, gak peduli shouldSearch.
+// Dipakai buat trigger eksplisit (cara/apa itu/tutorial).
+func trySearchOnly(input string) (string, bool) {
+	cfg, _ := loadConfig()
+	var results []searchResult
+	var err error
+	if cfg != nil && cfg.Search.GoogleAPIKey != "" && cfg.Search.GoogleCX != "" {
+		results, err = googleCSESearch(input, cfg.Search.GoogleAPIKey, cfg.Search.GoogleCX, 3)
+		if err != nil {
+			results, err = searchMeta(input, 3)
+		}
+	} else {
+		results, err = searchMeta(input, 3)
+	}
+	if err != nil {
+		results, err = ddgSearch(input, 3)
+	}
+	if err != nil {
+		return "", false
+	}
+	results = filterAndScore(results)
+	if len(results) == 0 {
+		return "", false
+	}
+	lastSearchResults = results
+	return formatSearchResults(results, input), true
+}
+
 func shouldSearch(input string) bool {
 	low := strings.ToLower(strings.TrimSpace(input))
 

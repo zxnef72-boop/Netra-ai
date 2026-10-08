@@ -180,10 +180,8 @@ func (m *Model) handleSearch(args []string) {
 
 // blockedDomains — domain yang gak informatif / skip
 var blockedDomains = []string{
-	"youtube.com", "youtu.be", "m.youtube.com",
 	"tiktok.com", "instagram.com", "facebook.com",
-	"pinterest.com", "twitter.com", "x.com",
-	"snapchat.com", "threads.net",
+	"pinterest.com", "snapchat.com", "threads.net",
 }
 
 // priorityDomains — domain yang diutamakan (informatif)
