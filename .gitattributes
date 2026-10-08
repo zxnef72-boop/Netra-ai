@@ -1,0 +1,3 @@
+templates/** linguist-vendored
+templates/** linguist-documentation
+netra-ide-ui/** linguist-vendored
