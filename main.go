@@ -962,6 +962,46 @@ func (m *Model) handleSlash(cmd string) {
 		m.messages = append(m.messages, ChatMsg{Role: "assistant", Text: logStr})
 		return
 	}
+	if cmd == "/ndock" || strings.HasPrefix(cmd, "/ndock ") {
+		args := strings.Fields(cmd)
+		if len(args) < 2 {
+			m.messages = append(m.messages, ChatMsg{Role: "assistant", Text: "Pakai:\n- /ndock pull <name> <url>\n- /ndock run <name> <cmd>\n- /ndock images\n- /ndock rm <name>"})
+			return
+		}
+		var out string
+		var err error
+		switch args[1] {
+		case "pull":
+			if len(args) < 4 {
+				out = "Pakai: /ndock pull <name> <url>"
+			} else {
+				out, err = ndockPull(args[2], args[3])
+			}
+		case "run":
+			if len(args) < 4 {
+				out = "Pakai: /ndock run <name> <cmd>"
+			} else {
+				out, err = ndockRun(args[2], strings.Join(args[3:], " "))
+			}
+		case "images":
+			out = ndockImages()
+		case "rm":
+			if len(args) < 3 {
+				out = "Pakai: /ndock rm <name>"
+			} else {
+				out = ndockRemove(args[2])
+			}
+		default:
+			out = "Subcommand gak dikenal: " + args[1]
+		}
+		if err != nil && out == "" {
+			out = "Error: " + err.Error()
+		} else if err != nil {
+			out += "\n\n_Error: " + err.Error() + "_"
+		}
+		m.messages = append(m.messages, ChatMsg{Role: "assistant", Text: out})
+		return
+	}
 	if cmd == "/search" || strings.HasPrefix(cmd, "/search ") {
 		m.handleSearch(strings.Fields(cmd))
 		return
@@ -2906,6 +2946,48 @@ func main() {
 		fmt.Println(logStr)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "Error:", err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+
+	// CLI mode: netra-ai ndock <subcommand>
+	if len(os.Args) > 2 && os.Args[1] == "ndock" {
+		sub := os.Args[2]
+		switch sub {
+		case "pull":
+			if len(os.Args) < 5 {
+				fmt.Fprintln(os.Stderr, "Pakai: netra-ai ndock pull <name> <url>")
+				os.Exit(1)
+			}
+			out, err := ndockPull(os.Args[3], os.Args[4])
+			fmt.Println(out)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "Error:", err)
+				os.Exit(1)
+			}
+		case "run":
+			if len(os.Args) < 5 {
+				fmt.Fprintln(os.Stderr, "Pakai: netra-ai ndock run <name> <cmd>")
+				os.Exit(1)
+			}
+			out, err := ndockRun(os.Args[3], strings.Join(os.Args[4:], " "))
+			fmt.Println(out)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "Error:", err)
+				os.Exit(1)
+			}
+		case "images":
+			fmt.Print(ndockImages())
+		case "rm":
+			if len(os.Args) < 4 {
+				fmt.Fprintln(os.Stderr, "Pakai: netra-ai ndock rm <name>")
+				os.Exit(1)
+			}
+			fmt.Println(ndockRemove(os.Args[3]))
+		default:
+			fmt.Fprintln(os.Stderr, "Subcommand gak dikenal:", sub)
+			fmt.Fprintln(os.Stderr, "Pakai: pull | run | images | rm")
 			os.Exit(1)
 		}
 		os.Exit(0)
