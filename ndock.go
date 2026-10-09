@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -158,21 +159,33 @@ func ndockPull(name, url string) (string, error) {
 	return log.String(), nil
 }
 
+// ndockRun — deteksi OS, pilih backend yang sesuai.
 func ndockRun(name, cmdStr string) (string, error) {
 	var log strings.Builder
 	log.WriteString(fmt.Sprintf("**NetraDock Run**: `%s`\n", name))
 	log.WriteString(fmt.Sprintf("Command: `%s`\n\n", cmdStr))
 
-	containerDir := filepath.Join(ndockPath(), name)
-	if _, err := os.Stat(containerDir); err != nil {
-		return log.String(), fmt.Errorf("image `%s` gak ketemu. pull dulu.", name)
-	}
+	backend, note := ndockBackend()
+	log.WriteString(fmt.Sprintf("Backend: `%s` (%s)\n\n", backend, note))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
-	c := exec.CommandContext(ctx, "proot-distro", "login", name, "--", "bash", "-c", cmdStr)
-	out, err := c.CombinedOutput()
+	var out []byte
+	var err error
+
+	switch backend {
+	case "proot-distro":
+		out, err = ndockRunProotDistro(ctx, name, cmdStr)
+	case "docker":
+		out, err = ndockRunDocker(ctx, name, cmdStr)
+	case "chroot":
+		out, err = ndockRunChroot(ctx, name, cmdStr)
+	case "wsl":
+		out, err = ndockRunWSL(ctx, name, cmdStr)
+	default:
+		return log.String(), fmt.Errorf("backend `%s` gak tersedia di sistem ini", backend)
+	}
 
 	log.WriteString("```\n")
 	log.WriteString(string(out))
@@ -189,6 +202,77 @@ func ndockRun(name, cmdStr string) (string, error) {
 		log.WriteString(fmt.Sprintf("\n_Exit: %v_\n", err))
 	}
 	return log.String(), nil
+}
+
+// ndockBackend — deteksi backend yang tersedia.
+func ndockBackend() (string, string) {
+	if isTermux() {
+		if _, err := exec.LookPath("proot-distro"); err == nil {
+			return "proot-distro", "Termux + proot-distro (isolated)"
+		}
+		return "proot-distro", "Termux (proot-distro gak ketemu)"
+	}
+	switch runtime.GOOS {
+	case "linux":
+		if _, err := exec.LookPath("docker"); err == nil {
+			return "docker", "Linux + Docker"
+		}
+		if os.Geteuid() == 0 {
+			if _, err := exec.LookPath("chroot"); err == nil {
+				return "chroot", "Linux root + chroot"
+			}
+		}
+		return "none", "Linux user (butuh Docker atau root untuk chroot)"
+	case "windows":
+		if _, err := exec.LookPath("wsl"); err == nil {
+			return "wsl", "Windows + WSL"
+		}
+		return "none", "Windows tanpa WSL"
+	case "darwin":
+		if _, err := exec.LookPath("docker"); err == nil {
+			return "docker", "macOS + Docker"
+		}
+		return "none", "macOS tanpa Docker"
+	}
+	return "none", runtime.GOOS + " (gak didukung)"
+}
+
+// ndockRunProotDistro — backend Termux.
+func ndockRunProotDistro(ctx context.Context, name, cmdStr string) ([]byte, error) {
+	containerDir := filepath.Join(ndockPath(), name)
+	if _, err := os.Stat(containerDir); err != nil {
+		return nil, fmt.Errorf("image `%s` gak ketemu. pull dulu.", name)
+	}
+	c := exec.CommandContext(ctx, "proot-distro", "login", name, "--", "bash", "-c", cmdStr)
+	return c.CombinedOutput()
+}
+
+// ndockRunDocker — backend Linux/macOS.
+func ndockRunDocker(ctx context.Context, name, cmdStr string) ([]byte, error) {
+	// Cek image ada di docker
+	c1 := exec.CommandContext(ctx, "docker", "image", "inspect", name)
+	if err := c1.Run(); err != nil {
+		return nil, fmt.Errorf("image `%s` gak ada di Docker. `docker pull %s` dulu.", name, name)
+	}
+	c := exec.CommandContext(ctx, "docker", "run", "--rm", name, "sh", "-c", cmdStr)
+	return c.CombinedOutput()
+}
+
+// ndockRunChroot — backend Linux root.
+func ndockRunChroot(ctx context.Context, name, cmdStr string) ([]byte, error) {
+	rootfsDir := filepath.Join(ndockPath(), name, "rootfs")
+	if _, err := os.Stat(rootfsDir); err != nil {
+		return nil, fmt.Errorf("rootfs `%s` gak ketemu", name)
+	}
+	c := exec.CommandContext(ctx, "chroot", rootfsDir, "sh", "-c", cmdStr)
+	return c.CombinedOutput()
+}
+
+// ndockRunWSL — backend Windows.
+func ndockRunWSL(ctx context.Context, name, cmdStr string) ([]byte, error) {
+	// WSL gak punya container sendiri — jalanin langsung di WSL default distro
+	c := exec.CommandContext(ctx, "wsl", "bash", "-c", cmdStr)
+	return c.CombinedOutput()
 }
 
 func ndockRemove(name string) string {
