@@ -580,9 +580,25 @@ func (m *Model) handleLua(args []string) {
 
 	out := strings.TrimRight(output.String(), "\n")
 	if out != "" {
-		result.WriteString("**Output:**\n```\n")
-		result.WriteString(out)
-		result.WriteString("\n```")
+		// Deteksi tipe output
+		isTable := strings.Contains(out, " | ") && strings.Contains(out, "---")
+		isLog := strings.HasPrefix(strings.TrimSpace(out), "==") || strings.HasPrefix(strings.TrimSpace(out), "--")
+		isCode := strings.Contains(out, "package ") || strings.Contains(out, "func ") || strings.Contains(out, "import ")
+
+		if isTable || isLog {
+			// Output tabel/log: teks MENTAH, tanpa code block
+			result.WriteString("**Output:**\n\n")
+			result.WriteString(out)
+		} else if isCode {
+			// Output kode: code block dengan syntax
+			result.WriteString("**Output:**\n```\n")
+			result.WriteString(out)
+			result.WriteString("\n```")
+		} else {
+			// Default: teks biasa
+			result.WriteString("**Output:**\n\n")
+			result.WriteString(out)
+		}
 	} else if err == nil {
 		result.WriteString("_(tidak ada output)_")
 	}

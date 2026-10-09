@@ -1914,22 +1914,28 @@ func (m Model) renderStatusBar(w int) string {
 // renderWelcomeScreen — layout opencode: logo + input box di tengah + footer.
 func (m Model) renderWelcomeScreen(w, h int) string {
 	logo := []string{
-		"███╗   ██╗███████╗████████╗██████╗  █████╗ ",
-		"████╗  ██║██╔════╝╚══██╔══╝██╔══██╗██╔══██╗",
-		"██╔██╗ ██║█████╗     ██║   ██████╔╝███████║",
-		"██║╚██╗██║███████╗   ██║   ██╔══██╗██║  ██║",
-		"╚═╝ ╚═╝╚═╝╚══════╝   ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═╝",
+		`███    ██ ███████ ████████ ██████   █████  `,
+		`████   ██ ██         ██    ██   ██ ██   ██ `,
+		`██ ██  ██ █████      ██    ██████  ███████ `,
+		`██  ██ ██ ██         ██    ██   ██ ██   ██ `,
+		`██   ████ ███████    ██    ██   ██ ██   ██ `,
 	}
 	gradient := []lipgloss.Color{
-		lipgloss.Color("#c4b5fd"), lipgloss.Color("#a78bfa"),
-		lipgloss.Color("#8b5cf6"), lipgloss.Color("#7aa2f7"),
-		lipgloss.Color("#5b8def"),
+		lipgloss.Color("#f0f0f0"), lipgloss.Color("#d8d8d8"),
+		lipgloss.Color("#c0c0c0"), lipgloss.Color("#a8a8a8"),
+		lipgloss.Color("#909090"),
 	}
 	var logoLines []string
 	for i, l := range logo {
 		logoLines = append(logoLines, lipgloss.NewStyle().Foreground(gradient[i]).Bold(true).Render(l))
 	}
-	logoBlock := strings.Join(logoLines, "\n")
+
+	// Shadow: 1 baris abu gelap di bawah logo, geser 1 kolom
+	shadowClr := lipgloss.Color("#404040")
+	shadowLine := " " + strings.Repeat("▄", 45)
+	shadow := lipgloss.NewStyle().Foreground(shadowClr).Render(shadowLine)
+
+	logoBlock := strings.Join(logoLines, "\n") + "\n" + shadow
 
 	boxW := w - 16
 	if boxW < 50 {
@@ -1938,18 +1944,18 @@ func (m Model) renderWelcomeScreen(w, h int) string {
 	if boxW > 90 {
 		boxW = 90
 	}
-	prompt := styleAccent.Bold(true).Render("> ")
+	prompt := styleText.Bold(true).Render("> ")
 	display := m.input
 	if m.inputCursor <= len(display) {
 		display = display[:m.inputCursor] + styleCursor.Render("█") + display[m.inputCursor:]
 	}
 	placeholder := ""
 	if len(m.input) == 0 {
-		placeholder = styleDim.Render("tanya apa aja...")
+		placeholder = styleDim.Render("Tanya apa aja...")
 	}
 	inputBox := lipgloss.NewStyle().
-		Border(lipgloss.DoubleBorder()).
-		BorderForeground(clrAccent).
+		Border(lipgloss.NormalBorder()).
+		BorderForeground(clrDim).
 		Padding(0, 1).
 		Width(boxW - 4).
 		Render(" " + prompt + styleText.Render(display) + placeholder)
@@ -1967,7 +1973,7 @@ func (m Model) renderWelcomeScreen(w, h int) string {
 	infoPanel := strings.Join(infoLines, "\n")
 
 	middle := lipgloss.JoinVertical(lipgloss.Center,
-		"", logoBlock, "", styleDim.Render("netra-ai · v0.1.0"),
+		"", logoBlock, "", styleMuted.Render("netra-ai · v0.1.0"),
 		"", "", inputBox, hintLine, "", "", infoPanel,
 	)
 
