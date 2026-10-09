@@ -578,24 +578,77 @@ func compileJava(cfg apkConfig) error {
 	}
 	args = append(args, javaFiles...)
 
-	cmd := exec.Command("ecj", args...)
+	// Pilih compiler: ecj (Termux) atau javac (Linux/Mac/Windows)
+	var compiler string
+	if _, lookErr := exec.LookPath("ecj"); lookErr == nil {
+		compiler = "ecj"
+	} else if _, lookErr := exec.LookPath("javac"); lookErr == nil {
+		compiler = "javac"
+	} else {
+		return fmt.Errorf("gak ada compiler Java (butuh ecj atau javac)")
+	}
+
+	// javac butuh flag beda dari ecj
+	var finalArgs []string
+	if compiler == "javac" {
+		finalArgs = []string{
+			"-source", "1.7", "-target", "1.7",
+			"-cp", androidJar,
+			"-d", classesDir,
+		}
+		finalArgs = append(finalArgs, javaFiles...)
+	} else {
+		finalArgs = args
+	}
+
+	cmd := exec.Command(compiler, finalArgs...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		_ = out
+		return fmt.Errorf("%s error: %v\n%s", compiler, err, string(out))
 	}
-	return err
+	return nil
 }
 
 func convertToDex(cfg apkConfig) error {
 	classesDir := filepath.Join(cfg.WorkDir, "classes")
 	outDex := filepath.Join(cfg.WorkDir, "classes.dex")
 
-	cmd := exec.Command("dx", "--dex", "--output", outDex, classesDir)
+	// Pilih tool dex: dx (lama) atau d8 (baru)
+	var dexArgs []string
+	var dexBin string
+	if _, err := exec.LookPath("d8"); err == nil {
+		dexBin = "d8"
+		dexArgs = []string{"--output", outDex, "--min-api", "21"}
+	} else if _, err := exec.LookPath("dx"); err == nil {
+		dexBin = "dx"
+		dexArgs = []string{"--dex", "--output", outDex}
+	} else {
+		return fmt.Errorf("gak ada tool dex (butuh dx atau d8)")
+	}
+
+	// Kumpulin .class files
+	var classFiles []string
+	filepath.Walk(classesDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		if !info.IsDir() && strings.HasSuffix(path, ".class") {
+			classFiles = append(classFiles, path)
+		}
+		return nil
+	})
+
+	if len(classFiles) == 0 {
+		return fmt.Errorf("gak ada .class file di %s", classesDir)
+	}
+
+	dexArgs = append(dexArgs, classFiles...)
+	cmd := exec.Command(dexBin, dexArgs...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		_ = out
+		return fmt.Errorf("%s error: %v\n%s", dexBin, err, string(out))
 	}
-	return err
+	return nil
 }
 
 func packageAPK(cfg apkConfig) error {
