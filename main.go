@@ -329,7 +329,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						}
 					}
 
-					useAI := strings.HasPrefix(strings.TrimSpace(lastUserText), "/ask ")
+					useAI := true // Selalu ke AI. Eliza cuma fallback kalau AI error.
 					if !useAI {
 						reply := elizaReplyCore(lastUserText)
 						if reply == "" {
@@ -934,6 +934,30 @@ func (m *Model) handleSlash(cmd string) {
 		logStr, serr := cmdSandboxRun(script)
 		if serr != nil && logStr == "" {
 			logStr = "Error: " + serr.Error()
+		}
+		m.messages = append(m.messages, ChatMsg{Role: "assistant", Text: logStr})
+		return
+	}
+	if cmd == "/agent-unsafe" {
+		agentAllowWrite = !agentAllowWrite
+		status := "OFF"
+		if agentAllowWrite {
+			status = "ON (write + run diizinkan!)"
+		}
+		m.messages = append(m.messages, ChatMsg{Role: "assistant", Text: "Agent unsafe mode: " + status})
+		return
+	}
+	if cmd == "/agent" || strings.HasPrefix(cmd, "/agent ") {
+		prompt := strings.TrimSpace(strings.TrimPrefix(cmd, "/agent"))
+		if prompt == "" {
+			m.messages = append(m.messages, ChatMsg{Role: "assistant", Text: "Pakai: `/agent <teks>`\n\nContoh:\n- `/agent baca main.go, jelasin`\n- `/agent list folder netra-ai`\n- `/agent jalanin go version`"})
+			return
+		}
+		logStr, err := cmdAgentRun(prompt, m.currentDir, m.provider)
+		if err != nil && logStr == "" {
+			logStr = "Error: " + err.Error()
+		} else if err != nil {
+			logStr += "\n\n_Error: " + err.Error() + "_"
 		}
 		m.messages = append(m.messages, ChatMsg{Role: "assistant", Text: logStr})
 		return
@@ -2344,7 +2368,26 @@ func (m Model) renderChatPane(w, h int) string {
 		for _, seg := range segments {
 			if seg.IsCode {
 				anyContent = true
-				label := seg.Lang
+				// Auto-detect bahasa dari isi kalau lang kosong
+				detectLang := seg.Lang
+				if detectLang == "" || detectLang == "code" {
+					c := seg.Text
+					switch {
+					case strings.Contains(c, "<!DOCTYPE") || strings.Contains(c, "<html") || strings.Contains(c, "<div "):
+						detectLang = "html"
+					case strings.Contains(c, "body {") || strings.Contains(c, "color:") || strings.Contains(c, "@media") || strings.Contains(c, "padding:") || strings.Contains(c, "border-radius"):
+						detectLang = "css"
+					case strings.Contains(c, "function ") || strings.Contains(c, "const ") || strings.Contains(c, "=>") || strings.Contains(c, "document."):
+						detectLang = "javascript"
+					case strings.Contains(c, "package main") || strings.Contains(c, "func "):
+						detectLang = "go"
+					case strings.Contains(c, "def ") && strings.Contains(c, ":"):
+						detectLang = "python"
+					case strings.Contains(c, "local ") && strings.Contains(c, "end"):
+						detectLang = "lua"
+					}
+				}
+				label := detectLang
 				if label == "" {
 					label = "code"
 				}
@@ -2367,7 +2410,7 @@ func (m Model) renderChatPane(w, h int) string {
 				}
 				inStyle := false
 				inScript := false
-				baseLang := strings.ToLower(seg.Lang)
+				baseLang := strings.ToLower(detectLang)
 
 				for i, cl := range strings.Split(seg.Text, "\n") {
 					// Detect CSS/JS block
@@ -2381,7 +2424,7 @@ func (m Model) renderChatPane(w, h int) string {
 						}
 					}
 
-					lineLang := seg.Lang
+					lineLang := detectLang
 					if inStyle {
 						lineLang = "css"
 					} else if inScript {
