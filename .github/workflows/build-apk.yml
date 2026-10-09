@@ -27,8 +27,10 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Install imagemagick
-        run: sudo apt-get install -y imagemagick
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y imagemagick ecj
 
       - name: Download Android build-tools
         run: |
