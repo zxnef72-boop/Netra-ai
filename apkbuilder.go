@@ -45,7 +45,10 @@ func cmdBuildAPKFromURL(targetURL, appName string) (string, error) {
 
 	pkg := "com.netra." + sanitizeName(strings.ToLower(appName))
 	workDir := filepath.Join(home, "apk-build", sanitizeName(appName)+"_"+fmt.Sprintf("%d", time.Now().Unix()))
-	outDir := "/sdcard/NetRatest1/apk-output"
+	outDir := os.Getenv("NETRA_OUT_DIR")
+	if outDir == "" {
+		outDir = "/sdcard/NetRatest1/apk-output"
+	}
 	os.MkdirAll(outDir, 0755)
 
 	// Cari icon custom

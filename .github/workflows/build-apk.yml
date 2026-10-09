@@ -1,0 +1,57 @@
+name: Build APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: 'Target URL'
+        required: true
+        default: 'https://komiku.org'
+      name:
+        description: 'Nama app'
+        required: true
+        default: 'MyApp'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install imagemagick
+        run: sudo apt-get install -y imagemagick
+
+      - name: Download Android build-tools
+        run: |
+          wget -q https://dl.google.com/android/repository/build-tools_r30.0.3-linux.zip
+          unzip -q build-tools_r30.0.3-linux.zip
+          echo "$PWD/android-11" >> $GITHUB_PATH
+
+      - name: Download android.jar
+        run: |
+          mkdir -p $HOME/android-sdk
+          wget -q https://github.com/Sable/android-platforms/raw/master/android-30/android.jar -O $HOME/android-sdk/android.jar
+
+      - name: Build Netra
+        run: go build -o netra-ai .
+
+      - name: Build APK
+        env:
+          NETRA_OUT_DIR: ${{ github.workspace }}/output
+        run: |
+          mkdir -p output
+          ./netra-ai build-apk "${{ inputs.url }}" "${{ inputs.name }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apk-${{ inputs.name }}
+          path: output/*.apk

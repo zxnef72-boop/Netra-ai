@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -282,6 +283,79 @@ func (m *Model) handleLua(args []string) {
 			item.RawSetString("size", lua.LNumber(r.Size))
 			item.RawSetString("neg_hits", lua.LNumber(r.NegHits))
 			tbl.RawSetInt(i+1, item)
+		}
+		L.Push(tbl)
+		return 1
+	}))
+
+	// ===== PROOT-DOCKER (Docker-like untuk Termux) =====
+
+	prootExec := func(args ...string) (string, int) {
+		ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, "proot-distro", args...)
+		out, err := cmd.CombinedOutput()
+		code := 0
+		if err != nil {
+			if ee, ok := err.(*exec.ExitError); ok {
+				code = ee.ExitCode()
+			} else {
+				code = -1
+			}
+		}
+		if ctx.Err() == context.DeadlineExceeded {
+			code = 124
+		}
+		return string(out), code
+	}
+
+	// proot_run(distro, command) -> output, exit_code
+	L.SetGlobal("proot_run", L.NewFunction(func(L *lua.LState) int {
+		distro := L.CheckString(1)
+		command := L.CheckString(2)
+		out, code := prootExec("login", distro, "--", "bash", "-c", command)
+		L.Push(lua.LString(out))
+		L.Push(lua.LNumber(code))
+		return 2
+	}))
+
+	// proot_install(distro) -> output, exit_code
+	L.SetGlobal("proot_install", L.NewFunction(func(L *lua.LState) int {
+		distro := L.CheckString(1)
+		out, code := prootExec("install", distro)
+		L.Push(lua.LString(out))
+		L.Push(lua.LNumber(code))
+		return 2
+	}))
+
+	// proot_remove(distro) -> output, exit_code
+	L.SetGlobal("proot_remove", L.NewFunction(func(L *lua.LState) int {
+		distro := L.CheckString(1)
+		out, code := prootExec("remove", "--force", distro)
+		L.Push(lua.LString(out))
+		L.Push(lua.LNumber(code))
+		return 2
+	}))
+
+	// proot_list() -> table of distro names
+	L.SetGlobal("proot_list", L.NewFunction(func(L *lua.LState) int {
+		prefix := os.Getenv("PREFIX")
+		if prefix == "" {
+			prefix = "/data/data/com.termux/files/usr"
+		}
+		containersDir := filepath.Join(prefix, "var", "lib", "proot-distro", "containers")
+		entries, err := os.ReadDir(containersDir)
+		tbl := L.NewTable()
+		if err != nil {
+			L.Push(tbl)
+			return 1
+		}
+		i := 1
+		for _, e := range entries {
+			if e.IsDir() {
+				tbl.RawSetInt(i, lua.LString(e.Name()))
+				i++
+			}
 		}
 		L.Push(tbl)
 		return 1

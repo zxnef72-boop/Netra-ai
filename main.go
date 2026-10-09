@@ -2847,6 +2847,21 @@ func wrapText(s string, maxW int) []string {
 var _ = time.Now
 
 func main() {
+	// CLI mode: netra-ai build-apk <url> <name>
+	if len(os.Args) > 1 && os.Args[1] == "build-apk" {
+		if len(os.Args) < 4 {
+			fmt.Fprintln(os.Stderr, "Pakai: netra-ai build-apk <url> <nama>")
+			os.Exit(1)
+		}
+		logStr, err := cmdBuildAPK(os.Args[2], os.Args[3])
+		fmt.Println(logStr)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "Error:", err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+
 	model, err := initialModel()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Error:", err)
