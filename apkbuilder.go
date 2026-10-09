@@ -614,11 +614,16 @@ func convertToDex(cfg apkConfig) error {
 	outDex := filepath.Join(cfg.WorkDir, "classes.dex")
 
 	// Pilih tool dex: dx (lama) atau d8 (baru)
+	// CATATAN: d8 butuh --output berupa FOLDER (bikin classes.dex di dalamnya)
+	//         dx butuh --output berupa FILE
+	dexOutDir := filepath.Join(cfg.WorkDir, "dex-out")
+	os.MkdirAll(dexOutDir, 0755)
+
 	var dexArgs []string
 	var dexBin string
 	if _, err := exec.LookPath("d8"); err == nil {
 		dexBin = "d8"
-		dexArgs = []string{"--output", outDex, "--min-api", "21"}
+		dexArgs = []string{"--output", dexOutDir, "--min-api", "21"}
 	} else if _, err := exec.LookPath("dx"); err == nil {
 		dexBin = "dx"
 		dexArgs = []string{"--dex", "--output", outDex}
@@ -647,6 +652,17 @@ func convertToDex(cfg apkConfig) error {
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%s error: %v\n%s", dexBin, err, string(out))
+	}
+
+	// d8 keluarin classes.dex di dexOutDir — pindahin ke WorkDir
+	if dexBin == "d8" {
+		src := filepath.Join(dexOutDir, "classes.dex")
+		if _, err := os.Stat(src); err != nil {
+			return fmt.Errorf("d8 gak hasilin classes.dex di %s", dexOutDir)
+		}
+		if err := copyFile(src, outDex); err != nil {
+			return fmt.Errorf("gagal pindahin classes.dex: %w", err)
+		}
 	}
 	return nil
 }
