@@ -1,8 +1,10 @@
 # Netra CLI
 
-Toolkit OSINT + AI + builder yang jalan di terminal. Didesain buat HP (Termux) tapi bisa cross-platform.
+Toolkit OSINT + AI + builder yang jalan di terminal.
 
-Dibuat dengan Go (mesin) + Lua (otak). Ringan, cepat, satu binary.
+Dibuat dengan Go (mesin) + Lua (otak) — **cross-platform**: jalan di Android (Termux), Linux, Windows (native + WSL), macOS. Satu binary, gak butuh runtime.
+
+Ringan, cepat, gak ada dependency ribet.
 
 ## Fitur
 
@@ -30,13 +32,33 @@ TUI:
 - Persistent memory
 - Personality system
 
-## Instalasi (Termux)
+## Instalasi
+
+Netra jalan di mana aja yang ada Go 1.21+.
+
+### Termux (Android)
 
     pkg install golang git proot-distro
     git clone https://github.com/zxnef72-boop/netra-ai.git
     cd netra-ai
     go build -o netra-ai-bin .
     ./netra-ai-bin
+
+### Linux / macOS / WSL
+
+    git clone https://github.com/zxnef72-boop/netra-ai.git
+    cd netra-ai
+    go build -o netra-ai .
+    ./netra-ai
+
+### Windows (native)
+
+    git clone https://github.com/zxnef72-boop/netra-ai.git
+    cd netra-ai
+    go build -o netra-ai.exe .
+    .\netra-ai.exe
+
+Panduan lengkap per-OS: [docs/TUTORIAL-INSTALL.md](docs/TUTORIAL-INSTALL.md)
 
 ## Setup AI (opsional)
 
