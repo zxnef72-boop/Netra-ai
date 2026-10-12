@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -285,6 +286,13 @@ func cmdAgentRun(userPrompt string, cwd string, provider Provider) (string, erro
 		resp, err := client.Do(req)
 		if err != nil {
 			return log.String(), fmt.Errorf("HTTP: %w", err)
+		}
+
+		// Cek status code SEBELUM decode
+		if resp.StatusCode != 200 {
+			bodyErr, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			return log.String(), fmt.Errorf("HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(bodyErr)))
 		}
 
 		var parsed struct {

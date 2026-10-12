@@ -1858,22 +1858,44 @@ func extFromLang(lang string) string {
 }
 
 func pickBlockIndex(args []string, blocks []string) int {
-	idx := 0
+	if len(blocks) == 0 {
+		return 0
+	}
+
+	// Default: block terpanjang dari 5 block TERAKHIR
+	idx := -1
 	auto := true
+
 	if len(args) >= 2 {
-		if n, err := strconv.Atoi(args[1]); err == nil && n >= 1 && n <= len(blocks) {
-			idx = n - 1
+		arg := strings.ToLower(strings.TrimSpace(args[1]))
+		// Alias: "last", "terakhir", "new", "baru" = block paling baru
+		if arg == "last" || arg == "terakhir" || arg == "new" || arg == "baru" {
+			idx = len(blocks) - 1
+			auto = false
+		} else if n, err := strconv.Atoi(arg); err == nil && n >= 1 && n <= len(blocks) {
+			// Numbering dari belakang: 1 = paling baru, N = paling lama
+			idx = len(blocks) - n
 			auto = false
 		}
 	}
+
 	if auto {
+		// Auto: cari block terpanjang dari 5 block terakhir
+		start := 0
+		if len(blocks) > 5 {
+			start = len(blocks) - 5
+		}
 		maxLen := 0
-		for i, b := range blocks {
-			if len(b) > maxLen {
-				maxLen = len(b)
+		for i := start; i < len(blocks); i++ {
+			if len(blocks[i]) > maxLen {
+				maxLen = len(blocks[i])
 				idx = i
 			}
 		}
+	}
+
+	if idx < 0 {
+		idx = len(blocks) - 1
 	}
 	return idx
 }
@@ -1996,16 +2018,17 @@ func (m Model) renderStatusBar(w int) string {
 // renderWelcomeScreen — layout opencode: logo + input box di tengah + footer.
 func (m Model) renderWelcomeScreen(w, h int) string {
 	logo := []string{
-		`███    ██ ███████ ████████ ██████   █████  `,
-		`████   ██ ██         ██    ██   ██ ██   ██ `,
-		`██ ██  ██ █████      ██    ██████  ███████ `,
-		`██  ██ ██ ██         ██    ██   ██ ██   ██ `,
-		`██   ████ ███████    ██    ██   ██ ██   ██ `,
+		"███╗   ██╗███████╗████████╗██████╗  █████╗ ",
+		"████╗  ██║██╔════╝╚══██╔══╝██╔══██╗██╔══██╗",
+		"██╔██╗ ██║█████╗     ██║   ██████╔╝███████║",
+		"██║╚██╗██║██╔══╝     ██║   ██╔══██╗██╔══██║",
+		"██║ ╚████║███████╗   ██║   ██║  ██║██║  ██║",
+		"╚═╝  ╚═══╝╚══════╝   ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═╝",
 	}
 	gradient := []lipgloss.Color{
 		lipgloss.Color("#f0f0f0"), lipgloss.Color("#d8d8d8"),
 		lipgloss.Color("#c0c0c0"), lipgloss.Color("#a8a8a8"),
-		lipgloss.Color("#909090"),
+		lipgloss.Color("#909090"), lipgloss.Color("#787878"),
 	}
 	var logoLines []string
 	for i, l := range logo {
@@ -2777,17 +2800,40 @@ func extractCodeBlocks(msgs []ChatMsg) []string {
 		if m.Role == "user" || m.Role == "error" {
 			continue
 		}
-		parts := strings.Split(m.Text, "```")
-		for i, p := range parts {
-			if i%2 == 1 {
-				text := p
-				if idx := strings.Index(text, "\n"); idx != -1 {
-					text = text[idx+1:]
+		// Parser line-based — lebih robust dari strings.Split
+		text := m.Text
+		lines := strings.Split(text, "\n")
+		var current []string
+		inBlock := false
+		for _, line := range lines {
+			trimmed := strings.TrimSpace(line)
+			if strings.HasPrefix(trimmed, "```") {
+				if inBlock {
+					// Tutup block — simpen
+					content := strings.Join(current, "\n")
+					content = strings.TrimRight(content, "\n")
+					if strings.TrimSpace(content) != "" {
+						blocks = append(blocks, content)
+					}
+					current = nil
+					inBlock = false
+				} else {
+					// Buka block — mulai kumpulin
+					inBlock = true
+					current = nil
 				}
-				text = strings.TrimRight(text, "\n")
-				if strings.TrimSpace(text) != "" {
-					blocks = append(blocks, text)
-				}
+				continue
+			}
+			if inBlock {
+				current = append(current, line)
+			}
+		}
+		// Kalau masih inBlock (stream kepotong sebelum ``` penutup), simpen yang ada
+		if inBlock && len(current) > 0 {
+			content := strings.Join(current, "\n")
+			content = strings.TrimRight(content, "\n")
+			if strings.TrimSpace(content) != "" {
+				blocks = append(blocks, content)
 			}
 		}
 	}

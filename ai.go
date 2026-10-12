@@ -112,6 +112,12 @@ type StreamChunk struct {
 }
 
 func streamChat(p Provider, msgs []Message, ch chan<- StreamChunk) {
+	// Gemini punya format beda — delegate
+	if strings.EqualFold(p.Type, "gemini") {
+		streamGemini(p, msgs, ch)
+		return
+	}
+
 	defer close(ch)
 
 	maxTok := p.MaxTokens
@@ -186,6 +192,127 @@ func streamChat(p Provider, msgs []Message, ch chan<- StreamChunk) {
 				ch <- StreamChunk{Text: parsed.Choices[0].Delta.Content, Provider: p.Name}
 			}
 			if parsed.Choices[0].FinishReason == "length" {
+				ch <- StreamChunk{Text: "\n\n_[stream kepotong. Ketik /continue buat lanjut.]_", Provider: p.Name}
+			}
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		ch <- StreamChunk{Err: err, Provider: p.Name}
+		return
+	}
+	ch <- StreamChunk{Done: true, Provider: p.Name}
+}
+
+// streamGemini — handler khusus Gemini (format beda dari OpenAI).
+func streamGemini(p Provider, msgs []Message, ch chan<- StreamChunk) {
+	defer close(ch)
+
+	// Convert OpenAI-style messages ke Gemini format
+	type geminiPart struct {
+		Text string `json:"text"`
+	}
+	type geminiContent struct {
+		Role  string       `json:"role,omitempty"`
+		Parts []geminiPart `json:"parts"`
+	}
+	var contents []geminiContent
+	var systemText string
+	for _, m := range msgs {
+		if m.Role == "system" {
+			systemText += m.Content + "\n"
+			continue
+		}
+		role := "user"
+		if m.Role == "assistant" {
+			role = "model"
+		}
+		contents = append(contents, geminiContent{
+			Role:  role,
+			Parts: []geminiPart{{Text: m.Content}},
+		})
+	}
+
+	reqBody := map[string]interface{}{
+		"contents": contents,
+	}
+	if systemText != "" {
+		reqBody["systemInstruction"] = map[string]interface{}{
+			"parts": []geminiPart{{Text: strings.TrimSpace(systemText)}},
+		}
+	}
+	// Optional: maxOutputTokens
+	if p.MaxTokens > 0 {
+		reqBody["generationConfig"] = map[string]interface{}{
+			"maxOutputTokens": p.MaxTokens,
+		}
+	}
+
+	body, _ := json.Marshal(reqBody)
+
+	url := fmt.Sprintf("%s/v1beta/models/%s:streamGenerateContent?alt=sse&key=%s",
+		p.BaseURL, p.Model, p.APIKey)
+
+	req, err := http.NewRequest("POST", url, bytes.NewReader(body))
+	if err != nil {
+		ch <- StreamChunk{Err: err, Provider: p.Name}
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 5 * time.Minute}
+	resp, err := client.Do(req)
+	if err != nil {
+		ch <- StreamChunk{Err: err, Provider: p.Name}
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		b, _ := io.ReadAll(resp.Body)
+		isRL := resp.StatusCode == 429 ||
+			strings.Contains(string(b), "rate_limit") ||
+			strings.Contains(string(b), "quota")
+		ch <- StreamChunk{
+			Err:       fmt.Errorf("HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(b))),
+			RateLimit: isRL,
+			Provider:  p.Name,
+		}
+		return
+	}
+
+	scanner := bufio.NewScanner(resp.Body)
+	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if !strings.HasPrefix(line, "data: ") {
+			continue
+		}
+		chunk := strings.TrimPrefix(line, "data: ")
+		if chunk == "[DONE]" {
+			ch <- StreamChunk{Done: true, Provider: p.Name}
+			return
+		}
+		var parsed struct {
+			Candidates []struct {
+				Content struct {
+					Parts []struct {
+						Text string `json:"text"`
+					} `json:"parts"`
+				} `json:"content"`
+				FinishReason string `json:"finishReason"`
+			} `json:"candidates"`
+		}
+		if err := json.Unmarshal([]byte(chunk), &parsed); err != nil {
+			continue
+		}
+		if len(parsed.Candidates) > 0 {
+			cand := parsed.Candidates[0]
+			for _, part := range cand.Content.Parts {
+				if part.Text != "" {
+					ch <- StreamChunk{Text: part.Text, Provider: p.Name}
+				}
+			}
+			if cand.FinishReason == "MAX_TOKENS" {
 				ch <- StreamChunk{Text: "\n\n_[stream kepotong. Ketik /continue buat lanjut.]_", Provider: p.Name}
 			}
 		}
