@@ -1,4 +1,19 @@
+# Local output
 downloads/
+
+# Backup files
 *.bak
 *.bak-*
+
+# Config (ada API key)
+config.json
+config.example.json
+
+# Binary
+netra-ai-bin
+netra-ai.exe
+netra-server/netra-server
+*.exe
+
+# Local cache
 .netra-ai/
