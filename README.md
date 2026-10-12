@@ -32,6 +32,60 @@ TUI:
 - Persistent memory
 - Personality system
 
+### Agent Otonom
+
+Agent yang bisa baca, tulis, list, dan jalanin command sendiri. Loop sampai selesai.
+
+- `/agent <prompt>` — jalanin agent
+- `/agent-unsafe on` — izinin write + run command
+- Tools: read_file, write_file, list_dir, run_command
+- Safety: path restriction /sdcard/AiNef, loop detection max 8 step, output 5-8KB
+
+Butuh provider OpenAI-compatible (Groq, OpenRouter, Ollama). Belum support Gemini.
+
+### HTML Toolkit
+
+6 mode buat fetch + olah HTML:
+
+- html tema <url> — fetch + bersihin (buang script/style/svg)
+- html asli <url> — fetch mentah + inject base href
+- html link <url> — extract semua link
+- html info <url> — extract metadata
+- html offline <url> — snapshot 1 file (inline asset, offline total)
+- html crawl <url> — multi-page mirror (max 10 halaman)
+
+Output: /sdcard/AiNef/
+
+### GitHub
+
+- github cari <keyword> — cari repo (by stars, 5 teratas)
+- github ambil <owner>/<repo>/<path> — fetch file raw
+
+### Direct Handlers
+
+- harga bitcoin — CoinGecko
+- jam di tokyo — Go native (offline)
+- kurs usd ke idr — frankfurter.dev
+- arti kata <kata> — dictionaryapi.dev
+- sinonim <kata> — Datamuse
+- quote motivasi — ZenQuotes
+- apa itu <topik> — Wikipedia (ID + EN fallback)
+
+### Ndock
+
+Docker-like via proot-distro. Auto-detect backend: proot/docker/wsl.
+
+- ndock pull <name> <url>
+- ndock run <name> <cmd>
+- ndock ps / logs / inspect / rm
+- Protect: alpine, netra-sandbox
+
+### Linkfinder
+
+- /linkfinder <file|url> — extract URL/endpoint
+
+---
+
 ## Instalasi
 
 Netra jalan di mana aja yang ada Go 1.21+.
