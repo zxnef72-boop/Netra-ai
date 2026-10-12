@@ -5,6 +5,7 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -162,6 +163,7 @@ func ndockPull(name, url string) (string, error) {
 // ndockRun — deteksi OS, pilih backend yang sesuai.
 func ndockRun(name, cmdStr string) (string, error) {
 	var log strings.Builder
+	defer func() { ndockLogAppend(name, cmdStr, log.String()) }()
 	log.WriteString(fmt.Sprintf("**NetraDock Run**: `%s`\n", name))
 	log.WriteString(fmt.Sprintf("Command: `%s`\n\n", cmdStr))
 
@@ -285,4 +287,197 @@ func ndockRemove(name string) string {
 	}
 	os.RemoveAll(path)
 	return fmt.Sprintf("Image `%s` dihapus.", name)
+}
+
+// ---- Fitur tambahan: ps / logs / inspect ----
+
+func ndockLogPath(name string) string {
+	return filepath.Join(ndockPath(), name, ".ndock.log")
+}
+
+func ndockLogAppend(name, cmdStr, output string) {
+	if name == "" {
+		return
+	}
+	dir := filepath.Join(ndockPath(), name)
+	if _, err := os.Stat(dir); err != nil {
+		return
+	}
+	logPath := ndockLogPath(name)
+	// B: Log rotation — kalau > 100KB, trim setengah awal
+	if info, err := os.Stat(logPath); err == nil && info.Size() > 100*1024 {
+		if data, err := os.ReadFile(logPath); err == nil {
+			half := len(data) / 2
+			idx := half
+			for idx < len(data) && data[idx] != '\n' {
+				idx++
+			}
+			if idx < len(data) {
+				idx++
+			}
+			os.WriteFile(logPath, data[idx:], 0644)
+		}
+	}
+	ts := time.Now().Format("2006-01-02 15:04:05")
+	entry := fmt.Sprintf("[%s] $ %s\n%s\n\n", ts, cmdStr, output)
+	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	f.WriteString(entry)
+}
+
+func ndockIsRunning(name string) bool {
+	c := exec.Command("pgrep", "-f", "proot.*"+name)
+	return c.Run() == nil
+}
+
+func ndockDirSize(path string) string {
+	var total int64
+	filepath.WalkDir(path, func(p string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if !d.IsDir() {
+			if info, err := d.Info(); err == nil {
+				total += info.Size()
+			}
+		}
+		return nil
+	})
+	return humanSize(total)
+}
+
+// A: Cache size per container, TTL 1 jam
+func ndockMetaPath(name string) string {
+	return filepath.Join(ndockPath(), name, ".ndock-meta.json")
+}
+
+type ndockMeta struct {
+	Size int64 `json:"size"`
+	TS   int64 `json:"ts"`
+}
+
+func ndockDirSizeCached(path, name string) string {
+	// Cek cache
+	if data, err := os.ReadFile(ndockMetaPath(name)); err == nil {
+		var m ndockMeta
+		if json.Unmarshal(data, &m) == nil {
+			if time.Now().Unix()-m.TS < 3600 {
+				return humanSize(m.Size)
+			}
+		}
+	}
+	// Cache expired / gak ada → walk ulang
+	var total int64
+	filepath.WalkDir(path, func(p string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if !d.IsDir() {
+			if info, err := d.Info(); err == nil {
+				total += info.Size()
+			}
+		}
+		return nil
+	})
+	// Save cache
+	m := ndockMeta{Size: total, TS: time.Now().Unix()}
+	if data, err := json.Marshal(m); err == nil {
+		os.WriteFile(ndockMetaPath(name), data, 0644)
+	}
+	return humanSize(total)
+}
+
+func humanSize(n int64) string {
+	const unit = 1024
+	if n < unit {
+		return fmt.Sprintf("%dB", n)
+	}
+	div, exp := int64(unit), 0
+	for m := n / unit; m >= unit; m /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f%c", float64(n)/float64(div), "KMGTPE"[exp])
+}
+
+func ndockPS() string {
+	var b strings.Builder
+	b.WriteString("**NetraDock PS**\n\n")
+	entries, err := os.ReadDir(ndockPath())
+	if err != nil {
+		b.WriteString("(kosong)\n")
+		return b.String()
+	}
+	b.WriteString("| NAME | STATUS | SIZE |\n")
+	b.WriteString("|------|--------|------|\n")
+	count := 0
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		status := "idle"
+		if ndockProtect[name] {
+			status = "system"
+		} else if ndockIsRunning(name) {
+			status = "running"
+		}
+		size := ndockDirSizeCached(filepath.Join(ndockPath(), name), name)
+		b.WriteString(fmt.Sprintf("| `%s` | %s | %s |\n", name, status, size))
+		count++
+	}
+	if count == 0 {
+		b.WriteString("(kosong)\n")
+	}
+	return b.String()
+}
+
+func ndockLogs(name string) string {
+	if name == "" {
+		return "Pakai: ndock logs <name>"
+	}
+	data, err := os.ReadFile(ndockLogPath(name))
+	if err != nil {
+		return fmt.Sprintf("Belum ada log untuk `%s`.\n", name)
+	}
+	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
+	if len(lines) > 50 {
+		lines = lines[len(lines)-50:]
+	}
+	return "**Logs `" + name + "`** (50 terakhir)\n\n```\n" + strings.Join(lines, "\n") + "\n```\n"
+}
+
+func ndockInspect(name string) string {
+	if name == "" {
+		return "Pakai: ndock inspect <name>"
+	}
+	dir := filepath.Join(ndockPath(), name)
+	info, err := os.Stat(dir)
+	if err != nil {
+		return fmt.Sprintf("Image `%s` gak ketemu.", name)
+	}
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("**Inspect `%s`**\n\n", name))
+	b.WriteString(fmt.Sprintf("- Path: `%s`\n", dir))
+	b.WriteString(fmt.Sprintf("- Dibuat: %s\n", info.ModTime().Format("2006-01-02 15:04")))
+	b.WriteString(fmt.Sprintf("- Ukuran: %s\n", ndockDirSizeCached(dir, name)))
+	b.WriteString(fmt.Sprintf("- Protected: %v\n", ndockProtect[name]))
+	if data, err := os.ReadFile(filepath.Join(dir, "manifest.json")); err == nil {
+		b.WriteString("- Manifest: ada\n")
+		b.WriteString("```json\n")
+		b.WriteString(strings.TrimSpace(string(data)))
+		b.WriteString("\n```\n")
+	} else {
+		b.WriteString("- Manifest: gak ada\n")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "rootfs")); err == nil {
+		b.WriteString("- Rootfs: ada\n")
+	}
+	if _, err := os.Stat(ndockLogPath(name)); err == nil {
+		b.WriteString("- Log: ada\n")
+	}
+	return b.String()
 }

@@ -605,3 +605,42 @@ func (m *Model) handleLua(args []string) {
 
 	m.messages = append(m.messages, ChatMsg{Role: "assistant", Text: result.String()})
 }
+
+// handleLinkfinder — wrapper /linkfinder buat panggil linkfinder.lua
+func (m *Model) handleLinkfinder(args []string) {
+	if len(args) < 2 {
+		m.messages = append(m.messages, ChatMsg{Role: "assistant", Text: "**Pakai:** `/linkfinder <file|url>`\n\n**Contoh:**\n- `/linkfinder main.go`\n- `/linkfinder https://example.com`\n- `/linkfinder app.js`\n\n**Fungsi:** extract semua URL, endpoint API, path, dan referensi file dari file JS/HTML atau halaman web."})
+		return
+	}
+
+	target := args[1]
+
+	// Kalau bukan URL, convert ke path absolut relatif ke cwd
+	if !strings.HasPrefix(target, "http://") && !strings.HasPrefix(target, "https://") {
+		if !filepath.IsAbs(target) {
+			target = filepath.Join(m.currentDir, target)
+		}
+	}
+
+	// Cari linkfinder.lua: cwd dulu, terus ~/netra-ai/
+	var luaPath string
+	candidates := []string{
+		filepath.Join(m.currentDir, "linkfinder.lua"),
+	}
+	home, _ := os.UserHomeDir()
+	if home != "" {
+		candidates = append(candidates, filepath.Join(home, "netra-ai", "linkfinder.lua"))
+	}
+	for _, c := range candidates {
+		if _, err := os.Stat(c); err == nil {
+			luaPath = c
+			break
+		}
+	}
+	if luaPath == "" {
+		m.messages = append(m.messages, ChatMsg{Role: "error", Text: "linkfinder.lua gak ketemu di:\n- " + strings.Join(candidates, "\n- ")})
+		return
+	}
+
+	m.handleLua([]string{"/linkfinder", luaPath, target})
+}

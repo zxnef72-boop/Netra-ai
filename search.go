@@ -209,7 +209,7 @@ func isBlocked(url string) bool {
 }
 
 // scoreResult — kasih skor, makin tinggi makin diprioritas
-func scoreResult(r searchResult) int {
+func scoreResult(r searchResult, query string) int {
 	low := strings.ToLower(r.URL)
 	score := 0
 
@@ -241,11 +241,35 @@ func scoreResult(r searchResult) int {
 		score -= 50
 	}
 
+	// Query relevance — kata kunci query yang muncul di title/snippet
+	lowTitleQ := strings.ToLower(r.Title)
+	lowSnipQ := strings.ToLower(r.Snippet)
+	for _, w := range strings.Fields(strings.ToLower(query)) {
+		if len(w) < 3 {
+			continue
+		}
+		if strings.Contains(lowTitleQ, w) {
+			score += 15
+		}
+		if strings.Contains(lowSnipQ, w) {
+			score += 5
+		}
+	}
+	// Bonus kalau kata kunci query ada di awal judul
+	for _, w := range strings.Fields(strings.ToLower(query)) {
+		if len(w) < 3 {
+			continue
+		}
+		if strings.HasPrefix(lowTitleQ, w) {
+			score += 10
+			break
+		}
+	}
 	return score
 }
 
 // filterAndScore — buang blocked, urut by score
-func filterAndScore(results []searchResult) []searchResult {
+func filterAndScore(results []searchResult, query string) []searchResult {
 	var clean []searchResult
 	for _, r := range results {
 		if !isBlocked(r.URL) {
@@ -255,7 +279,7 @@ func filterAndScore(results []searchResult) []searchResult {
 
 	// Sort by score (descending)
 	sort.Slice(clean, func(i, j int) bool {
-		return scoreResult(clean[i]) > scoreResult(clean[j])
+		return scoreResult(clean[i], query) > scoreResult(clean[j], query)
 	})
 	return clean
 }

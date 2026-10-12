@@ -1,12 +1,4 @@
-*.bak-*
+downloads/
 *.bak
-netra-ai-bin
-netra-ai.exe
-netra-server/netra-server
-backups/
-apk-build/
-config.json
-.env
-*.key
-*.pem
-*.token
+*.bak-*
+.netra-ai/

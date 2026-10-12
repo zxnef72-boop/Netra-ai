@@ -985,6 +985,20 @@ func (m *Model) handleSlash(cmd string) {
 			}
 		case "images":
 			out = ndockImages()
+		case "ps":
+			out = ndockPS()
+		case "logs":
+			if len(args) < 3 {
+				out = "Pakai: /ndock logs <name>"
+			} else {
+				out = ndockLogs(args[2])
+			}
+		case "inspect":
+			if len(args) < 3 {
+				out = "Pakai: /ndock inspect <name>"
+			} else {
+				out = ndockInspect(args[2])
+			}
 		case "rm":
 			if len(args) < 3 {
 				out = "Pakai: /ndock rm <name>"
@@ -1059,6 +1073,10 @@ func (m *Model) handleSlash(cmd string) {
 	}
 	if cmd == "/lua" || strings.HasPrefix(cmd, "/lua ") {
 		m.handleLua(strings.Fields(cmd))
+		return
+	}
+	if cmd == "/linkfinder" || strings.HasPrefix(cmd, "/linkfinder ") {
+		m.handleLinkfinder(strings.Fields(cmd))
 		return
 	}
 	if cmd == "/template" || strings.HasPrefix(cmd, "/template ") {
@@ -2952,7 +2970,7 @@ func main() {
 	}
 
 	// CLI mode: netra-ai ndock <subcommand>
-	if len(os.Args) > 2 && os.Args[1] == "ndock" {
+	if len(os.Args) > 2 && (os.Args[1] == "ndock" || os.Args[1] == "d") {
 		sub := os.Args[2]
 		switch sub {
 		case "pull":
@@ -2979,6 +2997,20 @@ func main() {
 			}
 		case "images":
 			fmt.Print(ndockImages())
+		case "ps":
+			fmt.Print(ndockPS())
+		case "logs":
+			if len(os.Args) < 4 {
+				fmt.Fprintln(os.Stderr, "Pakai: netra-ai ndock logs <name>")
+				os.Exit(1)
+			}
+			fmt.Print(ndockLogs(os.Args[3]))
+		case "inspect":
+			if len(os.Args) < 4 {
+				fmt.Fprintln(os.Stderr, "Pakai: netra-ai ndock inspect <name>")
+				os.Exit(1)
+			}
+			fmt.Print(ndockInspect(os.Args[3]))
 		case "rm":
 			if len(os.Args) < 4 {
 				fmt.Fprintln(os.Stderr, "Pakai: netra-ai ndock rm <name>")

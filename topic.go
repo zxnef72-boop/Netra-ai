@@ -106,12 +106,17 @@ var elizaTopic = ElizaTopic{
 // detectTopic — cari topik dari input
 func detectTopic(input string) string {
 	low := strings.ToLower(input)
+	// Longest-match wins — biar "main game" menang atas "game",
+	// dan hasilnya deterministik (map iteration Go random).
+	bestLen := 0
+	bestTopic := ""
 	for kw, topic := range topicKeywords {
-		if strings.Contains(low, kw) {
-			return topic
+		if len(kw) > bestLen && strings.Contains(low, kw) {
+			bestLen = len(kw)
+			bestTopic = topic
 		}
 	}
-	return ""
+	return bestTopic
 }
 
 // updateTopic — kalo ada topik baru, update

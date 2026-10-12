@@ -272,20 +272,27 @@ func elizaReplyCore(input string) string {
 	}
 
 	// Deteksi mood dari input
-	moodWords := map[string]string{
-		"sedih": "sedih", "galau": "galau", "nangis": "sedih",
-		"capek": "capek", "lelah": "capek", "penat": "capek", "cape": "capek",
-		"seneng": "senang", "senang": "senang", "bahagia": "senang",
-		"happy": "senang", "gembira": "senang",
-		"marah": "marah", "kesel": "marah", "jengkel": "marah",
-		"takut": "takut", "cemas": "cemas", "khawatir": "cemas",
-		"stress": "stress", "pusing": "pusing", "bingung": "bingung",
+	type moodWord struct{ kw, mood string }
+	moodList := []moodWord{
+		{"sedih", "sedih"}, {"galau", "galau"}, {"nangis", "sedih"},
+		{"capek", "capek"}, {"lelah", "capek"}, {"penat", "capek"}, {"cape", "capek"},
+		{"seneng", "senang"}, {"senang", "senang"}, {"bahagia", "senang"},
+		{"happy", "senang"}, {"gembira", "senang"},
+		{"marah", "marah"}, {"kesel", "marah"}, {"jengkel", "marah"},
+		{"takut", "takut"}, {"cemas", "cemas"}, {"khawatir", "cemas"},
+		{"stress", "stress"}, {"pusing", "pusing"}, {"bingung", "bingung"},
 	}
-	for kw, mood := range moodWords {
-		if strings.Contains(low, kw) {
-			updateMemory(func(mem *Memory) { mem.MoodTerakhir = mood })
-			break
+	// Longest-match wins — biar "capek" gak kalah sama "cape"
+	bestLen := 0
+	bestMood := ""
+	for _, mw := range moodList {
+		if strings.Contains(low, mw.kw) && len(mw.kw) > bestLen {
+			bestLen = len(mw.kw)
+			bestMood = mw.mood
 		}
+	}
+	if bestMood != "" {
+		updateMemory(func(mem *Memory) { mem.MoodTerakhir = bestMood })
 	}
 	defer saveMemory()
 
@@ -311,6 +318,39 @@ func elizaReplyCore(input string) string {
 
 	// 4. Simpen ke context
 	addToContext("user", input)
+
+	// === DIRECT HANDLERS (crypto, waktu, kurs) — API langsung ===
+	if ans, ok := tryDirectHandlers(input); ok {
+		addToContext("eliza", ans)
+		return ans
+	}
+
+	// === HTML CRAWLER (multi-page) ===
+	if cr, ok := tryHtmlCrawl(input); ok {
+		addToContext("eliza", cr)
+		return cr
+	}
+	// === HTML OFFLINE (snapshot 1 file) ===
+	if off, ok := tryHtmlOffline(input); ok {
+		addToContext("eliza", off)
+		return off
+	}
+	// === FETCH HTML (ambil source HTML dari URL) ===
+	if html, ok := tryFetchHTML(input); ok {
+		addToContext("eliza", html)
+		return html
+	}
+
+	// === GITHUB SEARCH ===
+	if gh, ok := tryGitHubSearch(input); ok {
+		addToContext("eliza", gh)
+		return gh
+	}
+	// === GITHUB RAW FETCH ===
+	if gh, ok := tryGitHubFetch(input); ok {
+		addToContext("eliza", gh)
+		return gh
+	}
 
 	// === LUA RULES (prioritas paling atas, sebelum entity ack & curhat) ===
 	if reply, ok := matchLuaRules(input); ok && reply != "" {
@@ -476,7 +516,7 @@ func elizaReplyCore(input string) string {
 			results, err = searchMeta(input, 3)
 		}
 		if err == nil {
-			results = filterAndScore(results)
+			results = filterAndScore(results, input)
 			if len(results) > 0 {
 				return formatSearchResults(results, input)
 			}
@@ -843,7 +883,7 @@ func elizaReplyCore(input string) string {
 			return fmt.Sprintf("Search error: %v", err)
 		}
 		// Filter hasil — buang YouTube, TikTok, sosmed
-		results = filterAndScore(results)
+		results = filterAndScore(results, input)
 		if len(results) == 0 {
 			return "Gak nemu hasil informatif di web."
 		}
@@ -890,7 +930,7 @@ func trySearchOnly(input string) (string, bool) {
 	if err != nil {
 		return "", false
 	}
-	results = filterAndScore(results)
+	results = filterAndScore(results, input)
 	if len(results) == 0 {
 		return "", false
 	}
