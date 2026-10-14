@@ -18,11 +18,23 @@ import (
 const viewerSource = `package main
 
 import (
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"syscall"
+	"unsafe"
 )
+
+var (
+	user32     = syscall.NewLazyDLL("user32.dll")
+	procMsgBox = user32.NewProc("MessageBoxW")
+)
+
+func messageBox(title, text string, flags uintptr) {
+	t, _ := syscall.UTF16PtrFromString(title)
+	m, _ := syscall.UTF16PtrFromString(text)
+	procMsgBox.Call(0, uintptr(unsafe.Pointer(m)), uintptr(unsafe.Pointer(t)), flags)
+}
 
 func main() {
 	exe, _ := os.Executable()
@@ -30,9 +42,7 @@ func main() {
 	htmlPath := filepath.Join(exeDir, "index.html")
 
 	if _, err := os.Stat(htmlPath); err != nil {
-		fmt.Println("Error: index.html gak ketemu di:", exeDir)
-		fmt.Println("Tekan Enter buat keluar...")
-		fmt.Scanln()
+		messageBox("Error", "index.html gak ketemu di:\n"+exeDir, 0x10)
 		return
 	}
 
@@ -50,7 +60,9 @@ func main() {
 		}
 	}
 
-	exec.Command("rundll32", "url.dll,FileProtocolHandler", htmlURL).Start()
+	if err := exec.Command("rundll32", "url.dll,FileProtocolHandler", htmlURL).Start(); err != nil {
+		messageBox("Error", "Gagal buka HTML. Install Edge atau Chrome dulu.", 0x10)
+	}
 }
 `
 
@@ -127,7 +139,7 @@ func buildEXEViewer(workDir, exeName string) error {
 	}
 
 	// Cross-compile ke Windows
-	cmd := exec.Command("go", "build", "-o", filepath.Join(workDir, exeName), "-ldflags", "-s -w", ".")
+	cmd := exec.Command("go", "build", "-o", filepath.Join(workDir, exeName), "-ldflags", "-s -w -H=windowsgui", ".")
 	cmd.Dir = viewerDir
 	cmd.Env = append(os.Environ(), "GOOS=windows", "GOARCH=amd64", "CGO_ENABLED=0")
 

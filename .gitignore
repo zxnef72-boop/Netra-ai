@@ -7,6 +7,8 @@ downloads/
 
 # Config (ada API key)
 config.json
+config.json.bak*
+config.json.*.bak
 config.example.json
 
 # Binary

@@ -17,6 +17,66 @@ import (
 
 // installerTemplate — source code installer Go yang di-generate.
 // Placeholder __APPNAME__, __VIEWEREXE__ di-replace runtime.
+const uninstallerTemplate = `// uninstaller.exe — bersihin install GameKu + shortcut + registry
+package main
+
+import (
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"syscall"
+	"unsafe"
+)
+
+const AppName = "__APPNAME__"
+
+var (
+	user32     = syscall.NewLazyDLL("user32.dll")
+	procMsgBox = user32.NewProc("MessageBoxW")
+)
+
+func messageBox(title, text string, flags uintptr) {
+	t, _ := syscall.UTF16PtrFromString(title)
+	m, _ := syscall.UTF16PtrFromString(text)
+	procMsgBox.Call(0, uintptr(unsafe.Pointer(m)), uintptr(unsafe.Pointer(t)), flags)
+}
+
+func main() {
+	// Build batch script yang bakal bersihin semuanya
+	// (dijalanin dari luar, biar bisa hapus folder yang lagi dipakai)
+	userProfile := os.Getenv("USERPROFILE")
+	localAppData := os.Getenv("LOCALAPPDATA")
+	desktop := filepath.Join(userProfile, "Desktop", AppName+".lnk")
+	startMenu := filepath.Join(userProfile, "AppData", "Roaming", "Microsoft", "Windows", "Start Menu", "Programs", AppName)
+
+	batPath := filepath.Join(os.Getenv("TEMP"), AppName+"_uninstall.bat")
+
+	bat := "@echo off\r\n"
+	bat += "timeout /t 2 /nobreak > nul\r\n"
+	bat += fmt.Sprintf("del \"%s\" > nul 2>&1\r\n", desktop)
+	bat += fmt.Sprintf("rmdir /s /q \"%s\" > nul 2>&1\r\n", startMenu)
+	bat += fmt.Sprintf("reg delete \"HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\%s\" /f > nul 2>&1\r\n", AppName)
+	bat += fmt.Sprintf("rmdir /s /q \"%s\" > nul 2>&1\r\n", filepath.Join(localAppData, AppName))
+	bat += "del \"%~f0\" > nul 2>&1\r\n"
+
+	if err := os.WriteFile(batPath, []byte(bat), 0644); err != nil {
+		messageBox(AppName, "Uninstall gagal tulis script: "+err.Error(), 0x10)
+		return
+	}
+
+	// Jalanin batch, langsung exit
+	cmd := exec.Command("cmd", "/c", "start", "/b", "cmd", "/c", batPath)
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	_ = cmd.Start()
+
+	messageBox(AppName, "Uninstall berhasil.\n\nFile + shortcut + registry dihapus.", 0x40)
+
+	// Self-delete uninstaller via batch (batch udah nunggu 2 detik)
+	os.Exit(0)
+}
+`
+
 const installerTemplate = `// Setup.exe — installer otomatis buat __APPNAME__
 package main
 
@@ -96,6 +156,7 @@ func main() {
 
         // 3. Bikin shortcut Desktop + Start Menu via PowerShell
         exePath := filepath.Join(installDir, ViewerExe)
+        uninstallPath := filepath.Join(installDir, "__SAFENAME__-uninstall.exe")
         userProfile := os.Getenv("USERPROFILE")
         desktop := filepath.Join(userProfile, "Desktop")
         startMenu := filepath.Join(userProfile, "AppData", "Roaming", "Microsoft", "Windows", "Start Menu", "Programs", AppName)
@@ -124,7 +185,7 @@ $Start.Save()
                 {"DisplayVersion", "1.0"},
                 {"Publisher", "NetRa"},
                 {"InstallLocation", installDir},
-                {"UninstallString", fmt.Sprintf(` + "`" + `cmd /c del "%s"` + "`" + `, exePath)},
+                {"UninstallString", fmt.Sprintf(` + "`" + `"%s"` + "`" + `, uninstallPath)},
         }
         for _, e := range regEntries {
                 exec.Command("reg", "add", regBase, "/v", e[0], "/t", "REG_SZ", "/d", e[1], "/f").Run()
@@ -202,11 +263,23 @@ func cmdBuildWinInstaller(htmlFolder, appName string) (string, error) {
 	viewerMain := `package main
 
 import (
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"syscall"
+	"unsafe"
 )
+
+var (
+	user32     = syscall.NewLazyDLL("user32.dll")
+	procMsgBox = user32.NewProc("MessageBoxW")
+)
+
+func messageBox(title, text string, flags uintptr) {
+	t, _ := syscall.UTF16PtrFromString(title)
+	m, _ := syscall.UTF16PtrFromString(text)
+	procMsgBox.Call(0, uintptr(unsafe.Pointer(m)), uintptr(unsafe.Pointer(t)), flags)
+}
 
 func main() {
 	exe, _ := os.Executable()
@@ -214,8 +287,7 @@ func main() {
 	htmlPath := filepath.Join(exeDir, "index.html")
 
 	if _, err := os.Stat(htmlPath); err != nil {
-		fmt.Println("Error: index.html gak ketemu di:", exeDir)
-		fmt.Scanln()
+		messageBox("Error", "index.html gak ketemu di:\n"+exeDir, 0x10)
 		return
 	}
 
@@ -233,7 +305,9 @@ func main() {
 		}
 	}
 
-	exec.Command("rundll32", "url.dll,FileProtocolHandler", htmlURL).Start()
+	if err := exec.Command("rundll32", "url.dll,FileProtocolHandler", htmlURL).Start(); err != nil {
+		messageBox("Error", "Gagal buka HTML. Install Edge atau Chrome dulu.", 0x10)
+	}
 }
 `
 	os.WriteFile(filepath.Join(viewerWork, "main.go"), []byte(viewerMain), 0644)
@@ -241,7 +315,7 @@ func main() {
 
 	viewerCmd := exec.Command("go", "build",
 		"-o", filepath.Join(payloadDir, viewerExe),
-		"-ldflags", "-s -w",
+		"-ldflags", "-s -w -H=windowsgui",
 		".")
 	viewerCmd.Dir = viewerWork
 	viewerCmd.Env = append(os.Environ(),
@@ -252,6 +326,29 @@ func main() {
 		return log.String(), err
 	}
 	log.WriteString("  `→` viewer      ✓\n")
+
+	// 2b. Compile uninstaller EXE (bersihin install)
+	uninstallerSrc := strings.ReplaceAll(uninstallerTemplate, "__APPNAME__", appName)
+	os.WriteFile(filepath.Join(viewerWork, "uninstall_main.go.txt"), []byte(uninstallerSrc), 0644)
+	uninstallerWork := filepath.Join(workDir, "uninstaller")
+	os.MkdirAll(uninstallerWork, 0755)
+	os.WriteFile(filepath.Join(uninstallerWork, "main.go"), []byte(uninstallerSrc), 0644)
+	os.WriteFile(filepath.Join(uninstallerWork, "go.mod"), []byte("module netrauninstaller\n\ngo 1.21\n"), 0644)
+
+	uninstallerExe := safeName + "-uninstall.exe"
+	uninstallerCmd := exec.Command("go", "build",
+		"-o", filepath.Join(payloadDir, uninstallerExe),
+		"-ldflags", "-s -w -H=windowsgui",
+		".")
+	uninstallerCmd.Dir = uninstallerWork
+	uninstallerCmd.Env = append(os.Environ(),
+		"GOOS=windows", "GOARCH=amd64", "CGO_ENABLED=0")
+
+	if out, err := uninstallerCmd.CombinedOutput(); err != nil {
+		log.WriteString(fmt.Sprintf("  `→` uninstaller ❌\n\n```\n%s\n```\n", string(out)))
+		return log.String(), err
+	}
+	log.WriteString("  `→` uninstaller ✓\n")
 
 	// 3. Copy HTML + assets ke payload
 	data, _ := os.ReadFile(indexPath)
@@ -277,6 +374,7 @@ func main() {
 	// 4. Generate installer main.go
 	installerSrc := strings.ReplaceAll(installerTemplate, "__APPNAME__", appName)
 	installerSrc = strings.ReplaceAll(installerSrc, "__VIEWEREXE__", viewerExe)
+	installerSrc = strings.ReplaceAll(installerSrc, "__SAFENAME__", safeName)
 	os.WriteFile(filepath.Join(installerDir, "main.go"), []byte(installerSrc), 0644)
 	os.WriteFile(filepath.Join(installerDir, "go.mod"), []byte("module netrainstaller\n\ngo 1.21\n"), 0644)
 	log.WriteString("  `→` installer   ✓\n")
