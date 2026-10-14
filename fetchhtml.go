@@ -209,34 +209,51 @@ func extractLinksFromHTML(html, baseURL string) []string {
 	var links []string
 	seen := make(map[string]bool)
 
-	// Regex href dan src
-	hrefRe := regexp.MustCompile(`(?i)(?:href|src)\s*=\s*["']([^"']+)["']`)
-	matches := hrefRe.FindAllStringSubmatch(html, -1)
+	// Cuma tag <a ...>, BUKAN <link>/<img>/<script>
+	tagRe := regexp.MustCompile(`(?is)<a\b[^>]*>`)
+	hrefRe := regexp.MustCompile(`(?i)href\s*=\s*["']([^"']+)["']`)
 
-	// Parse base URL
 	baseParsed, err := url.Parse(baseURL)
 	if err != nil {
 		return nil
 	}
 
-	for _, m := range matches {
-		if len(m) < 2 {
+	// Ekstensi yang dianggap asset, bukan link halaman
+	assetExt := map[string]bool{
+		".png": true, ".jpg": true, ".jpeg": true, ".gif": true,
+		".svg": true, ".ico": true, ".webp": true, ".bmp": true,
+		".css": true, ".js": true, ".mjs": true,
+		".woff": true, ".woff2": true, ".ttf": true, ".eot": true, ".otf": true,
+		".mp4": true, ".mp3": true, ".wav": true, ".webm": true,
+		".pdf": true, ".zip": true, ".rar": true, ".7z": true,
+		".exe": true, ".apk": true, ".dmg": true, ".iso": true,
+		".xml": true, ".json": true, ".rss": true,
+	}
+
+	for _, tag := range tagRe.FindAllString(html, -1) {
+		hm := hrefRe.FindStringSubmatch(tag)
+		if len(hm) < 2 {
 			continue
 		}
-		raw := strings.TrimSpace(m[1])
-
-		// Skip yang gak relevan
-		if strings.HasPrefix(raw, "#") ||
-			strings.HasPrefix(raw, "javascript:") ||
-			strings.HasPrefix(raw, "mailto:") ||
-			strings.HasPrefix(raw, "tel:") ||
-			strings.HasPrefix(raw, "data:") {
+		raw := strings.TrimSpace(hm[1])
+		if raw == "" {
+			continue
+		}
+		low := strings.ToLower(raw)
+		if strings.HasPrefix(low, "#") ||
+			strings.HasPrefix(low, "javascript:") ||
+			strings.HasPrefix(low, "mailto:") ||
+			strings.HasPrefix(low, "tel:") ||
+			strings.HasPrefix(low, "data:") ||
+			strings.HasPrefix(low, "whatsapp:") ||
+			strings.HasPrefix(low, "sms:") ||
+			strings.HasPrefix(low, "ftp:") {
 			continue
 		}
 
 		// Resolve relative URL
 		var abs string
-		if strings.HasPrefix(raw, "http://") || strings.HasPrefix(raw, "https://") {
+		if strings.HasPrefix(low, "http://") || strings.HasPrefix(low, "https://") {
 			abs = raw
 		} else if strings.HasPrefix(raw, "//") {
 			abs = baseParsed.Scheme + ":" + raw
@@ -255,6 +272,22 @@ func extractLinksFromHTML(html, baseURL string) []string {
 		if abs == "" || len(abs) > 500 {
 			continue
 		}
+
+		// Buang asset berdasarkan ekstensi path
+		cleanAbs := abs
+		if idx := strings.IndexAny(cleanAbs, "?#"); idx != -1 {
+			cleanAbs = cleanAbs[:idx]
+		}
+		dotIdx := strings.LastIndex(cleanAbs, ".")
+		slashIdx := strings.LastIndex(cleanAbs, "/")
+		if dotIdx > slashIdx && dotIdx != -1 {
+			ext := strings.ToLower(cleanAbs[dotIdx:])
+			if assetExt[ext] {
+				continue
+			}
+		}
+
+		abs = strings.NewReplacer("&amp;", "&", "&#38;", "&", "&quot;", "\"", "&#39;", "'").Replace(abs)
 		if seen[abs] {
 			continue
 		}

@@ -68,6 +68,14 @@ func tryHtmlCrawl(input string) (string, bool) {
 		}
 		visited[current] = true
 
+		// Cek robots.txt sebelum fetch
+		rb := robotsFor(client, current)
+		if !rb.IsAllowed(current) {
+			continue
+		}
+		if d := rb.Delay(); d > 0 {
+			time.Sleep(d)
+		}
 		html, err := fetchCrawl(client, current)
 		if err != nil {
 			continue

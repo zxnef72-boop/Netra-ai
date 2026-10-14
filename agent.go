@@ -69,6 +69,18 @@ func agentToolList() []agentToolDef {
 				"required": []string{"cmd"},
 			},
 		},
+		{
+			Name:        "run_in_container",
+			Description: "Jalanin shell command di dalam container Ndock (proot-distro). Terisolasi dari Termux. Butuh izin /agent-unsafe on.",
+			Parameters: map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"container": map[string]interface{}{"type": "string", "description": "Nama container Ndock"},
+					"command":   map[string]interface{}{"type": "string", "description": "Command di container"},
+				},
+				"required": []string{"container", "command"},
+			},
+		},
 	}
 }
 
@@ -106,7 +118,7 @@ func agentPathAllowed(path string) bool {
 
 func agentExecTool(name string, args map[string]interface{}, cwd string) string {
 	// Safety: tool bahaya butuh izin
-	if (name == "write_file" || name == "run_command") && !agentAllowWrite {
+	if (name == "write_file" || name == "run_command" || name == "run_in_container") && !agentAllowWrite {
 		return "[DIBLOKIR: tool '" + name + "' butuh izin. Jalankan /agent-unsafe on dulu]"
 	}
 
@@ -208,6 +220,20 @@ func agentExecTool(name string, args map[string]interface{}, cwd string) string 
 			return fmt.Sprintf("[exit error: %v]\n%s", err, result)
 		}
 		return result
+	case "run_in_container":
+		container, _ := args["container"].(string)
+		command, _ := args["command"].(string)
+		if container == "" || command == "" {
+			return "[error: container/command kosong]"
+		}
+		out, err := ndockRun(container, command)
+		if err != nil {
+			return fmt.Sprintf("[exit error: %v]\n%s", err, out)
+		}
+		if len(out) > 5000 {
+			out = out[:5000] + "\n... (terpotong)"
+		}
+		return out
 	}
 	return fmt.Sprintf("[error: tool tidak dikenal: %s]", name)
 }
@@ -256,7 +282,7 @@ func cmdAgentRun(userPrompt string, cwd string, provider Provider) (string, erro
 	}
 
 	messages := []agentMsg{
-		{Role: "system", Content: "Kamu adalah Netra Agent. Bisa baca file (read_file), edit file (write_file), list folder (list_dir), dan jalanin command (run_command). Pakai tools kalau perlu. Kalau sudah cukup, jawab langsung tanpa tools. Jawab singkat dalam Bahasa Indonesia."},
+		{Role: "system", Content: "Kamu adalah Netra Agent. Bisa baca file (read_file), edit file (write_file), list folder (list_dir), dan jalanin command di Termux (run_command), dan jalanin command di container Ndock (run_in_container). Pakai tools kalau perlu. Kalau sudah cukup, jawab langsung tanpa tools. Jawab singkat dalam Bahasa Indonesia."},
 		{Role: "user", Content: userPrompt},
 	}
 
@@ -407,6 +433,12 @@ func cmdAgentRun(userPrompt string, cwd string, provider Provider) (string, erro
 					summary = fmt.Sprintf("%d item", n)
 				}
 			case "run_command":
+				if len(result) > 200 {
+					summary = result[:200] + "..."
+				} else {
+					summary = result
+				}
+			case "run_in_container":
 				if len(result) > 200 {
 					summary = result[:200] + "..."
 				} else {

@@ -65,6 +65,11 @@ var moodAcks = map[string][]string{
 
 // ===== RULES =====
 var elizaRules = []elizaRule{
+	// TEST: cek render HTML->ANSI (hapus kalau udah kelar)
+	{regexp.MustCompile(`^test html$`), []string{
+		`Tes render: <b>tebal</b>, <i>miring</i>, <u>garis bawah</u>, <s>coret</s>, <code>kode</code>.` +
+			` Link: <a href="https://example.com">contoh</a> dan <br>baris baru.`,
+	}, ""},
 	// GREETING (PALING ATAS)
 	{regexp.MustCompile(`^(halo|hai|hey|hi|assalam|pagi|siang|sore|malam|apa kabar)[\s!?.,]*$`), []string{
 		"Halo! Ada yang mau kamu ceritain?",
@@ -1195,6 +1200,7 @@ func elizaTemplateBaseDir() string {
 
 // elizaFakeStream — fake streaming
 func elizaFakeStream(reply string, ch chan<- StreamChunk) {
+	reply = htmlToANSI(reply) // tag HTML -> ANSI (b, i, a href, dll)
 	defer close(ch)
 	if strings.Contains(reply, "\n") {
 		lines := strings.Split(reply, "\n")

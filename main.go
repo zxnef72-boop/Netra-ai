@@ -329,7 +329,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						}
 					}
 
-					useAI := true // Selalu ke AI. Eliza cuma fallback kalau AI error.
+					useAI := strings.HasPrefix(strings.TrimSpace(lastUserText), "/ask ")
 					if !useAI {
 						reply := elizaReplyCore(lastUserText)
 						if reply == "" {
@@ -344,24 +344,34 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					// User pakai /ask — baru route ke AI
 					ch := make(chan StreamChunk, 64)
 					m.streamCh = ch
-					m.messages = append(m.messages, ChatMsg{Role: "assistant", Text: ""})
 					go streamChat(m.provider, history, ch)
 					return m, waitForChunk(ch)
 				}
 			}
-			// Fallback ke Eliza offline
-			lastUser := ""
-			for i := len(m.messages) - 1; i >= 0; i-- {
-				if m.messages[i].Role == "user" {
-					lastUser = m.messages[i].Text
-					break
+			// Fallback ke Eliza HANYA kalau provider aktif emang Eliza
+			isEliza := strings.HasPrefix(strings.ToLower(m.provider.Name), "eliza")
+			if isEliza {
+				lastUser := ""
+				for i := len(m.messages) - 1; i >= 0; i-- {
+					if m.messages[i].Role == "user" {
+						lastUser = m.messages[i].Text
+						break
+					}
 				}
+				reply := elizaReplyCore(lastUser)
+				if reply == "" {
+					reply = "Eliza offline mode. API gak tersambung."
+				}
+				m.messages = append(m.messages, ChatMsg{Role: "assistant", Text: reply})
+			} else {
+				// Provider non-Eliza gagal — tampilkan error asli, jangan fallback
+				errMsg := msg.Err.Error()
+				if errMsg == "" {
+					errMsg = "unknown error"
+				}
+				m.messages = append(m.messages, ChatMsg{Role: "error",
+					Text: fmt.Sprintf("Provider `%s` gagal: %s", m.provider.Name, errMsg)})
 			}
-			reply := elizaReplyCore(lastUser)
-			if reply == "" {
-				reply = "Eliza offline mode. API gak tersambung."
-			}
-			m.messages = append(m.messages, ChatMsg{Role: "assistant", Text: reply})
 			m.streaming = false
 			m.chatScroll = 0
 			return m, nil
@@ -777,6 +787,10 @@ func (m *Model) newChat() {
 
 func (m *Model) handleSlash(cmd string) {
 	cmd = strings.TrimSpace(cmd)
+	if cmd == "/ndock" || strings.HasPrefix(cmd, "/ndock ") {
+		m.handleNdock(strings.Fields(cmd))
+		return
+	}
 
 	if cmd == "/copy" || strings.HasPrefix(cmd, "/copy ") {
 		m.handleCopy(strings.Fields(cmd))
@@ -800,6 +814,14 @@ func (m *Model) handleSlash(cmd string) {
 	}
 	if cmd == "/continue" || cmd == "/lanjut" {
 		m.handleContinue()
+		return
+	}
+	if cmd == "/agent-unsafe" || strings.HasPrefix(cmd, "/agent-unsafe ") {
+		m.handleAgentUnsafe(strings.Fields(cmd))
+		return
+	}
+	if cmd == "/agent" || strings.HasPrefix(cmd, "/agent ") {
+		m.handleAgent(strings.Fields(cmd))
 		return
 	}
 
@@ -907,8 +929,18 @@ func (m *Model) handleSlash(cmd string) {
 		var logStr string
 		var err error
 		if kind == "apk" {
-			logStr, err = cmdBuildAPK(targetURL, appName)
+			// Cek flag --fullscreen di appName
+			fs := strings.Contains(strings.ToLower(appName), "--fullscreen")
+			if fs {
+				appName = strings.TrimSpace(strings.ReplaceAll(appName, "--fullscreen", ""))
+				appName = strings.TrimSpace(strings.ReplaceAll(appName, "--FULLSCREEN", ""))
+			}
+			logStr, err = cmdBuildAPK(targetURL, appName, fs)
 		} else if kind == "html" {
+			// Kalau targetURL bukan absolute path, join dengan currentDir
+			if !strings.HasPrefix(targetURL, "/") && !strings.HasPrefix(targetURL, "~/") {
+				targetURL = filepath.Join(m.currentDir, targetURL)
+			}
 			// Cek flag --fullscreen di appName
 			fullscreen := strings.Contains(strings.ToLower(appName), "--fullscreen")
 			if fullscreen {
@@ -936,84 +968,6 @@ func (m *Model) handleSlash(cmd string) {
 			logStr = "Error: " + serr.Error()
 		}
 		m.messages = append(m.messages, ChatMsg{Role: "assistant", Text: logStr})
-		return
-	}
-	if cmd == "/agent-unsafe" {
-		agentAllowWrite = !agentAllowWrite
-		status := "OFF"
-		if agentAllowWrite {
-			status = "ON (write + run diizinkan!)"
-		}
-		m.messages = append(m.messages, ChatMsg{Role: "assistant", Text: "Agent unsafe mode: " + status})
-		return
-	}
-	if cmd == "/agent" || strings.HasPrefix(cmd, "/agent ") {
-		prompt := strings.TrimSpace(strings.TrimPrefix(cmd, "/agent"))
-		if prompt == "" {
-			m.messages = append(m.messages, ChatMsg{Role: "assistant", Text: "Pakai: `/agent <teks>`\n\nContoh:\n- `/agent baca main.go, jelasin`\n- `/agent list folder netra-ai`\n- `/agent jalanin go version`"})
-			return
-		}
-		logStr, err := cmdAgentRun(prompt, m.currentDir, m.provider)
-		if err != nil && logStr == "" {
-			logStr = "Error: " + err.Error()
-		} else if err != nil {
-			logStr += "\n\n_Error: " + err.Error() + "_"
-		}
-		m.messages = append(m.messages, ChatMsg{Role: "assistant", Text: logStr})
-		return
-	}
-	if cmd == "/ndock" || strings.HasPrefix(cmd, "/ndock ") {
-		args := strings.Fields(cmd)
-		if len(args) < 2 {
-			m.messages = append(m.messages, ChatMsg{Role: "assistant", Text: "Pakai:\n- /ndock pull <name> <url>\n- /ndock run <name> <cmd>\n- /ndock images\n- /ndock rm <name>"})
-			return
-		}
-		var out string
-		var err error
-		switch args[1] {
-		case "pull":
-			if len(args) < 4 {
-				out = "Pakai: /ndock pull <name> <url>"
-			} else {
-				out, err = ndockPull(args[2], args[3])
-			}
-		case "run":
-			if len(args) < 4 {
-				out = "Pakai: /ndock run <name> <cmd>"
-			} else {
-				out, err = ndockRun(args[2], strings.Join(args[3:], " "))
-			}
-		case "images":
-			out = ndockImages()
-		case "ps":
-			out = ndockPS()
-		case "logs":
-			if len(args) < 3 {
-				out = "Pakai: /ndock logs <name>"
-			} else {
-				out = ndockLogs(args[2])
-			}
-		case "inspect":
-			if len(args) < 3 {
-				out = "Pakai: /ndock inspect <name>"
-			} else {
-				out = ndockInspect(args[2])
-			}
-		case "rm":
-			if len(args) < 3 {
-				out = "Pakai: /ndock rm <name>"
-			} else {
-				out = ndockRemove(args[2])
-			}
-		default:
-			out = "Subcommand gak dikenal: " + args[1]
-		}
-		if err != nil && out == "" {
-			out = "Error: " + err.Error()
-		} else if err != nil {
-			out += "\n\n_Error: " + err.Error() + "_"
-		}
-		m.messages = append(m.messages, ChatMsg{Role: "assistant", Text: out})
 		return
 	}
 	if cmd == "/search" || strings.HasPrefix(cmd, "/search ") {
@@ -1073,10 +1027,6 @@ func (m *Model) handleSlash(cmd string) {
 	}
 	if cmd == "/lua" || strings.HasPrefix(cmd, "/lua ") {
 		m.handleLua(strings.Fields(cmd))
-		return
-	}
-	if cmd == "/linkfinder" || strings.HasPrefix(cmd, "/linkfinder ") {
-		m.handleLinkfinder(strings.Fields(cmd))
 		return
 	}
 	if cmd == "/template" || strings.HasPrefix(cmd, "/template ") {
@@ -1858,44 +1808,22 @@ func extFromLang(lang string) string {
 }
 
 func pickBlockIndex(args []string, blocks []string) int {
-	if len(blocks) == 0 {
-		return 0
-	}
-
-	// Default: block terpanjang dari 5 block TERAKHIR
-	idx := -1
+	idx := 0
 	auto := true
-
 	if len(args) >= 2 {
-		arg := strings.ToLower(strings.TrimSpace(args[1]))
-		// Alias: "last", "terakhir", "new", "baru" = block paling baru
-		if arg == "last" || arg == "terakhir" || arg == "new" || arg == "baru" {
-			idx = len(blocks) - 1
-			auto = false
-		} else if n, err := strconv.Atoi(arg); err == nil && n >= 1 && n <= len(blocks) {
-			// Numbering dari belakang: 1 = paling baru, N = paling lama
-			idx = len(blocks) - n
+		if n, err := strconv.Atoi(args[1]); err == nil && n >= 1 && n <= len(blocks) {
+			idx = n - 1
 			auto = false
 		}
 	}
-
 	if auto {
-		// Auto: cari block terpanjang dari 5 block terakhir
-		start := 0
-		if len(blocks) > 5 {
-			start = len(blocks) - 5
-		}
 		maxLen := 0
-		for i := start; i < len(blocks); i++ {
-			if len(blocks[i]) > maxLen {
-				maxLen = len(blocks[i])
+		for i, b := range blocks {
+			if len(b) > maxLen {
+				maxLen = len(b)
 				idx = i
 			}
 		}
-	}
-
-	if idx < 0 {
-		idx = len(blocks) - 1
 	}
 	return idx
 }
@@ -2021,26 +1949,19 @@ func (m Model) renderWelcomeScreen(w, h int) string {
 		"███╗   ██╗███████╗████████╗██████╗  █████╗ ",
 		"████╗  ██║██╔════╝╚══██╔══╝██╔══██╗██╔══██╗",
 		"██╔██╗ ██║█████╗     ██║   ██████╔╝███████║",
-		"██║╚██╗██║██╔══╝     ██║   ██╔══██╗██╔══██║",
-		"██║ ╚████║███████╗   ██║   ██║  ██║██║  ██║",
-		"╚═╝  ╚═══╝╚══════╝   ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═╝",
+		"██║╚██╗██║███████╗   ██║   ██╔══██╗██║  ██║",
+		"╚═╝ ╚═╝╚═╝╚══════╝   ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═╝",
 	}
 	gradient := []lipgloss.Color{
-		lipgloss.Color("#f0f0f0"), lipgloss.Color("#d8d8d8"),
-		lipgloss.Color("#c0c0c0"), lipgloss.Color("#a8a8a8"),
-		lipgloss.Color("#909090"), lipgloss.Color("#787878"),
+		lipgloss.Color("#c4b5fd"), lipgloss.Color("#a78bfa"),
+		lipgloss.Color("#8b5cf6"), lipgloss.Color("#7aa2f7"),
+		lipgloss.Color("#5b8def"),
 	}
 	var logoLines []string
 	for i, l := range logo {
 		logoLines = append(logoLines, lipgloss.NewStyle().Foreground(gradient[i]).Bold(true).Render(l))
 	}
-
-	// Shadow: 1 baris abu gelap di bawah logo, geser 1 kolom
-	shadowClr := lipgloss.Color("#404040")
-	shadowLine := " " + strings.Repeat("▄", 45)
-	shadow := lipgloss.NewStyle().Foreground(shadowClr).Render(shadowLine)
-
-	logoBlock := strings.Join(logoLines, "\n") + "\n" + shadow
+	logoBlock := strings.Join(logoLines, "\n")
 
 	boxW := w - 16
 	if boxW < 50 {
@@ -2049,18 +1970,18 @@ func (m Model) renderWelcomeScreen(w, h int) string {
 	if boxW > 90 {
 		boxW = 90
 	}
-	prompt := styleText.Bold(true).Render("> ")
+	prompt := styleAccent.Bold(true).Render("> ")
 	display := m.input
 	if m.inputCursor <= len(display) {
 		display = display[:m.inputCursor] + styleCursor.Render("█") + display[m.inputCursor:]
 	}
 	placeholder := ""
 	if len(m.input) == 0 {
-		placeholder = styleDim.Render("Tanya apa aja...")
+		placeholder = styleDim.Render("tanya apa aja...")
 	}
 	inputBox := lipgloss.NewStyle().
-		Border(lipgloss.NormalBorder()).
-		BorderForeground(clrDim).
+		Border(lipgloss.DoubleBorder()).
+		BorderForeground(clrAccent).
 		Padding(0, 1).
 		Width(boxW - 4).
 		Render(" " + prompt + styleText.Render(display) + placeholder)
@@ -2078,7 +1999,7 @@ func (m Model) renderWelcomeScreen(w, h int) string {
 	infoPanel := strings.Join(infoLines, "\n")
 
 	middle := lipgloss.JoinVertical(lipgloss.Center,
-		"", logoBlock, "", styleMuted.Render("netra-ai · v0.1.0"),
+		"", logoBlock, "", styleDim.Render("netra-ai · v0.1.0"),
 		"", "", inputBox, hintLine, "", "", infoPanel,
 	)
 
@@ -2186,14 +2107,21 @@ func (m Model) renderFileBrowser(w, h int) string {
 	lines = append(lines, "")
 
 	// List
-	maxRows := innerH - 10
+	maxRows := innerH - 16
 	if maxRows < 1 {
 		maxRows = 1
 	}
-	for i, fe := range m.fileEntries {
-		if i >= maxRows {
-			break
-		}
+	// Auto-scroll window — cursor selalu keliatan
+	startIdx := 0
+	if m.fileCursor >= maxRows {
+		startIdx = m.fileCursor - maxRows + 1
+	}
+	endIdx := startIdx + maxRows
+	if endIdx > len(m.fileEntries) {
+		endIdx = len(m.fileEntries)
+	}
+	for i := startIdx; i < endIdx; i++ {
+		fe := m.fileEntries[i]
 		isCursor := i == m.fileCursor && m.fileFocus
 
 		icon := " "
@@ -2449,26 +2377,7 @@ func (m Model) renderChatPane(w, h int) string {
 		for _, seg := range segments {
 			if seg.IsCode {
 				anyContent = true
-				// Auto-detect bahasa dari isi kalau lang kosong
-				detectLang := seg.Lang
-				if detectLang == "" || detectLang == "code" {
-					c := seg.Text
-					switch {
-					case strings.Contains(c, "<!DOCTYPE") || strings.Contains(c, "<html") || strings.Contains(c, "<div "):
-						detectLang = "html"
-					case strings.Contains(c, "body {") || strings.Contains(c, "color:") || strings.Contains(c, "@media") || strings.Contains(c, "padding:") || strings.Contains(c, "border-radius"):
-						detectLang = "css"
-					case strings.Contains(c, "function ") || strings.Contains(c, "const ") || strings.Contains(c, "=>") || strings.Contains(c, "document."):
-						detectLang = "javascript"
-					case strings.Contains(c, "package main") || strings.Contains(c, "func "):
-						detectLang = "go"
-					case strings.Contains(c, "def ") && strings.Contains(c, ":"):
-						detectLang = "python"
-					case strings.Contains(c, "local ") && strings.Contains(c, "end"):
-						detectLang = "lua"
-					}
-				}
-				label := detectLang
+				label := seg.Lang
 				if label == "" {
 					label = "code"
 				}
@@ -2491,7 +2400,7 @@ func (m Model) renderChatPane(w, h int) string {
 				}
 				inStyle := false
 				inScript := false
-				baseLang := strings.ToLower(detectLang)
+				baseLang := strings.ToLower(seg.Lang)
 
 				for i, cl := range strings.Split(seg.Text, "\n") {
 					// Detect CSS/JS block
@@ -2505,7 +2414,7 @@ func (m Model) renderChatPane(w, h int) string {
 						}
 					}
 
-					lineLang := detectLang
+					lineLang := seg.Lang
 					if inStyle {
 						lineLang = "css"
 					} else if inScript {
@@ -2800,40 +2709,17 @@ func extractCodeBlocks(msgs []ChatMsg) []string {
 		if m.Role == "user" || m.Role == "error" {
 			continue
 		}
-		// Parser line-based — lebih robust dari strings.Split
-		text := m.Text
-		lines := strings.Split(text, "\n")
-		var current []string
-		inBlock := false
-		for _, line := range lines {
-			trimmed := strings.TrimSpace(line)
-			if strings.HasPrefix(trimmed, "```") {
-				if inBlock {
-					// Tutup block — simpen
-					content := strings.Join(current, "\n")
-					content = strings.TrimRight(content, "\n")
-					if strings.TrimSpace(content) != "" {
-						blocks = append(blocks, content)
-					}
-					current = nil
-					inBlock = false
-				} else {
-					// Buka block — mulai kumpulin
-					inBlock = true
-					current = nil
+		parts := strings.Split(m.Text, "```")
+		for i, p := range parts {
+			if i%2 == 1 {
+				text := p
+				if idx := strings.Index(text, "\n"); idx != -1 {
+					text = text[idx+1:]
 				}
-				continue
-			}
-			if inBlock {
-				current = append(current, line)
-			}
-		}
-		// Kalau masih inBlock (stream kepotong sebelum ``` penutup), simpen yang ada
-		if inBlock && len(current) > 0 {
-			content := strings.Join(current, "\n")
-			content = strings.TrimRight(content, "\n")
-			if strings.TrimSpace(content) != "" {
-				blocks = append(blocks, content)
+				text = strings.TrimRight(text, "\n")
+				if strings.TrimSpace(text) != "" {
+					blocks = append(blocks, text)
+				}
 			}
 		}
 	}
@@ -3000,77 +2886,6 @@ func wrapText(s string, maxW int) []string {
 var _ = time.Now
 
 func main() {
-	// CLI mode: netra-ai build-apk <url> <name>
-	if len(os.Args) > 1 && os.Args[1] == "build-apk" {
-		if len(os.Args) < 4 {
-			fmt.Fprintln(os.Stderr, "Pakai: netra-ai build-apk <url> <nama>")
-			os.Exit(1)
-		}
-		logStr, err := cmdBuildAPK(os.Args[2], os.Args[3])
-		fmt.Println(logStr)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "Error:", err)
-			os.Exit(1)
-		}
-		os.Exit(0)
-	}
-
-	// CLI mode: netra-ai ndock <subcommand>
-	if len(os.Args) > 2 && (os.Args[1] == "ndock" || os.Args[1] == "d") {
-		sub := os.Args[2]
-		switch sub {
-		case "pull":
-			if len(os.Args) < 5 {
-				fmt.Fprintln(os.Stderr, "Pakai: netra-ai ndock pull <name> <url>")
-				os.Exit(1)
-			}
-			out, err := ndockPull(os.Args[3], os.Args[4])
-			fmt.Println(out)
-			if err != nil {
-				fmt.Fprintln(os.Stderr, "Error:", err)
-				os.Exit(1)
-			}
-		case "run":
-			if len(os.Args) < 5 {
-				fmt.Fprintln(os.Stderr, "Pakai: netra-ai ndock run <name> <cmd>")
-				os.Exit(1)
-			}
-			out, err := ndockRun(os.Args[3], strings.Join(os.Args[4:], " "))
-			fmt.Println(out)
-			if err != nil {
-				fmt.Fprintln(os.Stderr, "Error:", err)
-				os.Exit(1)
-			}
-		case "images":
-			fmt.Print(ndockImages())
-		case "ps":
-			fmt.Print(ndockPS())
-		case "logs":
-			if len(os.Args) < 4 {
-				fmt.Fprintln(os.Stderr, "Pakai: netra-ai ndock logs <name>")
-				os.Exit(1)
-			}
-			fmt.Print(ndockLogs(os.Args[3]))
-		case "inspect":
-			if len(os.Args) < 4 {
-				fmt.Fprintln(os.Stderr, "Pakai: netra-ai ndock inspect <name>")
-				os.Exit(1)
-			}
-			fmt.Print(ndockInspect(os.Args[3]))
-		case "rm":
-			if len(os.Args) < 4 {
-				fmt.Fprintln(os.Stderr, "Pakai: netra-ai ndock rm <name>")
-				os.Exit(1)
-			}
-			fmt.Println(ndockRemove(os.Args[3]))
-		default:
-			fmt.Fprintln(os.Stderr, "Subcommand gak dikenal:", sub)
-			fmt.Fprintln(os.Stderr, "Pakai: pull | run | images | rm")
-			os.Exit(1)
-		}
-		os.Exit(0)
-	}
-
 	model, err := initialModel()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Error:", err)

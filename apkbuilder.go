@@ -26,7 +26,11 @@ type apkConfig struct {
 	IconPath    string
 }
 
-func cmdBuildAPKFromURL(targetURL, appName string) (string, error) {
+func cmdBuildAPKFromURL(targetURL, appName string, opts ...bool) (string, error) {
+	// Fullscreen mode — pakai template ~/mainactivity_fullscreen.txt
+	if len(opts) > 0 && opts[0] {
+		return cmdBuildAPKFullscreen(targetURL, appName)
+	}
 	var log strings.Builder
 	home, _ := os.UserHomeDir()
 	// Parse @version dari nama app: "MyApp@1.2.3"
@@ -480,7 +484,9 @@ public class MainActivity extends Activity {
         String js = "(function(){" +
             "var css='div[class*=\"ad-\"],div[class*=\"-ad\"],div[class*=\"ads\"],div[id*=\"ad-\"],div[id*=\"ads\"],div[class*=\"banner\"],div[class*=\"popup\"],div[class*=\"overlay\"],div[class*=\"sponsor\"],div[class*=\"promo\"],iframe[src*=\"googlesyndication\"],iframe[src*=\"doubleclick\"],iframe[src*=\"googleads\"],iframe[src*=\"adservice\"]{display:none !important;visibility:hidden !important}';" +
             "var s=document.createElement('style');s.type='text/css';s.appendChild(document.createTextNode(css));document.head.appendChild(s);" +
-            "var kill=function(){var els=document.querySelectorAll('[class*=\"ad-\"],[class*=\"-ad\"],[class*=\"ads\"],[class*=\"banner\"],[class*=\"popup\"],[class*=\"overlay\"],[class*=\"sponsor\"],[class*=\"promo\"]');for(var i=0;i<els.length;i++){els[i].style.display='none'}};kill();setTimeout(kill,1500);setTimeout(kill,4000);" +
+            "var kill=function(){var els=document.querySelectorAll('[class*=\"ad-\"],[class*=\"-ad\"],[class*=\"ads\"],[class*=\"banner\"],[class*=\"popup\"],[class*=\"overlay\"],[class*=\"sponsor\"],[class*=\"promo\"],[class*=\"modal\"]');for(var i=0;i<els.length;i++){els[i].style.display='none'}};" +
+            "var killText=function(){var kws=['nonaktifkan adblock','aktifkan adblock','disable adblock','matikan adblock','blokir iklan','upgrade premium','promo upgrade'];var all=document.querySelectorAll('div,section,aside,article,p,h1,h2,h3,button');for(var i=0;i<all.length;i++){var el=all[i];var t=(el.innerText||'').toLowerCase();if(!t||t.length>500)continue;for(var k=0;k<kws.length;k++){if(t.indexOf(kws[k])>-1){var p=el;for(var d=0;d<5;d++){if(!p.parentElement)break;var st=window.getComputedStyle(p);if(st.position==='fixed'||st.position==='absolute'||p.tagName==='BODY')break;p=p.parentElement}if(p&&p.tagName!=='BODY'&&p.tagName!=='HTML'){p.style.display='none';try{p.remove()}catch(e2){}}break}}}};" +
+            "kill();killText();setTimeout(function(){kill();killText()},1500);setTimeout(function(){kill();killText()},4000);" +
             "})();";
         view.evaluateJavascript(js, null);
     }
@@ -512,6 +518,10 @@ func writeManifest(cfg apkConfig) error {
     <uses-sdk android:minSdkVersion="%d" android:targetSdkVersion="%d" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.DOWNLOAD_WITHOUT_NOTIFICATION" />
 
     <application
         android:label="%s"

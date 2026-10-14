@@ -8,7 +8,7 @@ import (
 )
 
 // cmdBuildAPK — POST ke pwa2apk.com, simpan APK ke /sdcard/NetRatest1/apk-output/
-func cmdBuildAPK(targetURL, appName string) (string, error) {
+func cmdBuildAPK(targetURL, appName string, opts ...bool) (string, error) {
 	// Kalau targetURL diawali "@", baca dari file
 	if len(targetURL) > 1 && targetURL[0] == '@' {
 		data, err := os.ReadFile(targetURL[1:])
@@ -17,7 +17,7 @@ func cmdBuildAPK(targetURL, appName string) (string, error) {
 		}
 		targetURL = strings.TrimSpace(string(data))
 	}
-	return cmdBuildAPKFromURL(targetURL, appName)
+	return cmdBuildAPKFromURL(targetURL, appName, opts...)
 }
 
 // cmdBuildEXE — placeholder, pake Pake CLI nanti
