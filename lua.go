@@ -2,7 +2,9 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -566,6 +568,68 @@ func (m *Model) handleLua(args []string) {
 	}
 
 	start := time.Now()
+	// http_post(url, body, headers_tbl) -> body, status, err
+	L.SetGlobal("http_post", L.NewFunction(func(L *lua.LState) int {
+		url := L.CheckString(1)
+		body := L.OptString(2, "")
+		headersTbl := L.OptTable(3, nil)
+
+		req, err := http.NewRequest("POST", url, bytes.NewBufferString(body))
+		if err != nil {
+			L.Push(lua.LNil)
+			L.Push(lua.LNumber(0))
+			L.Push(lua.LString(err.Error()))
+			return 3
+		}
+		req.Header.Set("Content-Type", "application/json")
+		if headersTbl != nil {
+			headersTbl.ForEach(func(k, v lua.LValue) {
+				req.Header.Set(k.String(), v.String())
+			})
+		}
+		client := &http.Client{Timeout: 15 * time.Second}
+		resp, err := client.Do(req)
+		if err != nil {
+			L.Push(lua.LNil)
+			L.Push(lua.LNumber(0))
+			L.Push(lua.LString(err.Error()))
+			return 3
+		}
+		defer resp.Body.Close()
+		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1024*1024))
+		L.Push(lua.LString(string(respBody)))
+		L.Push(lua.LNumber(resp.StatusCode))
+		L.Push(lua.LNil)
+		return 3
+	}))
+
+	// json_parse(str) -> table, err
+	L.SetGlobal("json_parse", L.NewFunction(func(L *lua.LState) int {
+		s := L.CheckString(1)
+		var v interface{}
+		if err := json.Unmarshal([]byte(s), &v); err != nil {
+			L.Push(lua.LNil)
+			L.Push(lua.LString(err.Error()))
+			return 2
+		}
+		L.Push(goValueToLua(L, v))
+		L.Push(lua.LNil)
+		return 2
+	}))
+
+	// json_encode(tbl) -> string
+	L.SetGlobal("json_encode", L.NewFunction(func(L *lua.LState) int {
+		v := L.Get(1)
+		goV := luaValueToGo(v)
+		b, err := json.Marshal(goV)
+		if err != nil {
+			L.Push(lua.LString(""))
+			return 1
+		}
+		L.Push(lua.LString(string(b)))
+		return 1
+	}))
+
 	err = L.DoString(string(data))
 	elapsed := time.Since(start)
 
@@ -643,4 +707,63 @@ func (m *Model) handleLinkfinder(args []string) {
 	}
 
 	m.handleLua([]string{"/linkfinder", luaPath, target})
+}
+
+// goValueToLua — convert hasil json.Unmarshal ke lua.LValue.
+func goValueToLua(L *lua.LState, v interface{}) lua.LValue {
+	switch val := v.(type) {
+	case nil:
+		return lua.LNil
+	case bool:
+		return lua.LBool(val)
+	case float64:
+		return lua.LNumber(val)
+	case string:
+		return lua.LString(val)
+	case []interface{}:
+		tbl := L.NewTable()
+		for i, item := range val {
+			tbl.RawSetInt(i+1, goValueToLua(L, item))
+		}
+		return tbl
+	case map[string]interface{}:
+		tbl := L.NewTable()
+		for k, item := range val {
+			tbl.RawSetString(k, goValueToLua(L, item))
+		}
+		return tbl
+	default:
+		return lua.LNil
+	}
+}
+
+// luaValueToGo — convert lua.LValue ke interface{} buat json.Marshal.
+func luaValueToGo(v lua.LValue) interface{} {
+	switch val := v.(type) {
+	case *lua.LNilType:
+		return nil
+	case lua.LBool:
+		return bool(val)
+	case lua.LNumber:
+		return float64(val)
+	case lua.LString:
+		return string(val)
+	case *lua.LTable:
+		// Deteksi array vs object
+		maxN := val.MaxN()
+		if maxN > 0 {
+			arr := make([]interface{}, 0, maxN)
+			for i := 1; i <= maxN; i++ {
+				arr = append(arr, luaValueToGo(val.RawGetInt(i)))
+			}
+			return arr
+		}
+		obj := make(map[string]interface{})
+		val.ForEach(func(k, v lua.LValue) {
+			obj[k.String()] = luaValueToGo(v)
+		})
+		return obj
+	default:
+		return nil
+	}
 }

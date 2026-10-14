@@ -307,6 +307,8 @@ func elizaReplyCore(input string) string {
 	}
 
 	// === CONTEXT MEMORY — PALING ATAS, sebelum apapun ===
+	// 0. Simpen input asli (sebelum pronoun resolution)
+	inputRaw := input
 	// 1. Resolve pronoun dulu (kalo ada "dia" → ganti nama terakhir)
 	input = resolvePronoun(input)
 	text = strings.ToLower(strings.TrimSpace(input))
@@ -358,7 +360,7 @@ func elizaReplyCore(input string) string {
 	}
 
 	// === LUA RULES (prioritas paling atas, sebelum entity ack & curhat) ===
-	if reply, ok := matchLuaRules(input); ok && reply != "" {
+	if reply, ok := matchLuaRules(input, inputRaw); ok && reply != "" {
 		addToContext("eliza", reply)
 		return reply
 	}
