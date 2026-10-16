@@ -21,6 +21,22 @@ func cmdBuildAPKFast(targetURL, appName string) (string, error) {
 		appName = "NetraApp"
 	}
 
+	// Auto-detect: kalau targetURL itu file path, baca isinya
+	if !strings.HasPrefix(targetURL, "http://") && !strings.HasPrefix(targetURL, "https://") {
+		if data, ferr := os.ReadFile(targetURL); ferr == nil {
+			content := strings.TrimSpace(string(data))
+			// Ambil baris pertama yang kayak URL
+			lines := strings.Split(content, "\n")
+			for _, ln := range lines {
+				ln = strings.TrimSpace(ln)
+				if strings.HasPrefix(ln, "http://") || strings.HasPrefix(ln, "https://") {
+					targetURL = ln
+					break
+				}
+			}
+		}
+	}
+
 	home, _ := os.UserHomeDir()
 	iconPath := filepath.Join(home, ".netra-ai", "icon.png")
 	if _, err := os.Stat(iconPath); err != nil {
