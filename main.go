@@ -202,35 +202,23 @@ func defaultWorkDir() string {
 		}
 	}
 
-	// Prioritas 2: folder AiNef — auto-create kalo belum ada
-	ainefDirs := []string{
-		"/sdcard/AiNef",
-		"/storage/emulated/0/AiNef",
-	}
-	for _, d := range ainefDirs {
-		if info, err := os.Stat(d); err == nil && info.IsDir() {
-			return d
-		}
-	}
-	// coba bikin
-	for _, d := range ainefDirs {
-		if err := os.MkdirAll(d, 0755); err == nil {
-			return d
+	// Prioritas 2: home dulu (selalu accessible)
+	if home, err := os.UserHomeDir(); err == nil {
+		if info, err := os.Stat(home); err == nil && info.IsDir() {
+			return home
 		}
 	}
 
-	// Prioritas 3: fallback
+	// Prioritas 3: cek /sdcard kalau ada izin
 	fallbacks := []string{
 		"/sdcard/NetRatest1",
+		"/sdcard/AiNef",
 		"/sdcard/Download",
 	}
 	for _, c := range fallbacks {
-		if info, err := os.Stat(c); err == nil && info.IsDir() {
+		if _, err := os.ReadDir(c); err == nil {
 			return c
 		}
-	}
-	if home, err := os.UserHomeDir(); err == nil {
-		return home
 	}
 	cwd, _ := os.Getwd()
 	return cwd
@@ -1859,22 +1847,11 @@ func (m Model) View() string {
 		chatH = 4
 	}
 
-	var chatArea string
 	if m.showFiles {
-		sidebarW := 26
-		if w < 80 {
-			sidebarW = 22
-		}
-		chatW := w - sidebarW - 3
-		if chatW < 30 {
-			chatW = 30
-		}
-		sidebar := m.renderFileBrowser(sidebarW, chatH)
-		chat := m.renderChatPane(chatW, chatH)
-		chatArea = lipgloss.JoinHorizontal(lipgloss.Top, sidebar, "  ", chat)
-	} else {
-		chatArea = m.renderChatPane(w, chatH)
+		return m.renderFileBrowser(w, h)
 	}
+
+	chatArea := m.renderChatPane(w, chatH)
 
 	inputBox := m.renderInputBar(w)
 
@@ -2064,54 +2041,43 @@ func formatSize(b int64) string {
 }
 
 func (m Model) renderFileBrowser(w, h int) string {
-	innerW := w - 4
-	innerH := h - 2
+	boxW := w - 10
+	if boxW > 70 {
+		boxW = 70
+	}
+	if boxW < 36 {
+		boxW = 36
+	}
+	boxH := h - 6
+	if boxH > 22 {
+		boxH = 22
+	}
+	if boxH < 8 {
+		boxH = 8
+	}
 
-	var lines []string
+	innerW := boxW - 4
+	innerH := boxH - 2
 
-	// Header
-	headIcon := lipgloss.NewStyle().Foreground(lipgloss.Color("#7aa2f7")).Bold(true).Render("❐")
+	var content strings.Builder
+
+	headIcon := lipgloss.NewStyle().Foreground(lipgloss.Color("#7aa2f7")).Bold(true).Render("[*]")
 	headText := lipgloss.NewStyle().Foreground(lipgloss.Color("#7aa2f7")).Bold(true).Render(" FILES")
-	lines = append(lines, " "+headIcon+headText)
-	lines = append(lines, "")
+	content.WriteString(" " + headIcon + headText + "\n\n")
 
-	// Path
 	crumb := m.currentDir
 	if len([]rune(crumb)) > innerW-2 {
 		r := []rune(crumb)
-		crumb = "…" + string(r[len(r)-(innerW-3):])
+		crumb = "..." + string(r[len(r)-(innerW-3):])
 	}
-	lines = append(lines, " "+lipgloss.NewStyle().Foreground(lipgloss.Color("#565f89")).Render(crumb))
-	lines = append(lines, "")
+	content.WriteString(" " + lipgloss.NewStyle().Foreground(lipgloss.Color("#565f89")).Render(crumb) + "\n")
+	content.WriteString(" " + lipgloss.NewStyle().Foreground(lipgloss.Color("#414868")).Render(strings.Repeat("-", innerW-1)) + "\n")
 
-	// Kolom adaptif — kalo sidebar sempit, size disembunyiin
-	showSize := innerW >= 26
-	sizeColW := 6
-	nameColW := innerW - 4
-	if showSize {
-		nameColW = innerW - sizeColW - 3
-	}
-	if nameColW < 8 {
-		nameColW = 8
+	maxRows := innerH - 5
+	if maxRows < 3 {
+		maxRows = 3
 	}
 
-	hdrStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#565f89")).Bold(true)
-	var header string
-	if showSize {
-		header = fmt.Sprintf(" %-*s %*s", nameColW, "NAME", sizeColW, "SIZE")
-	} else {
-		header = fmt.Sprintf(" %-*s", nameColW, "NAME")
-	}
-	lines = append(lines, hdrStyle.Render(header))
-	lines = append(lines, " "+lipgloss.NewStyle().Foreground(lipgloss.Color("#414868")).Render(strings.Repeat("─", innerW-1)))
-	lines = append(lines, "")
-
-	// List
-	maxRows := innerH - 16
-	if maxRows < 1 {
-		maxRows = 1
-	}
-	// Auto-scroll window — cursor selalu keliatan
 	startIdx := 0
 	if m.fileCursor >= maxRows {
 		startIdx = m.fileCursor - maxRows + 1
@@ -2120,97 +2086,69 @@ func (m Model) renderFileBrowser(w, h int) string {
 	if endIdx > len(m.fileEntries) {
 		endIdx = len(m.fileEntries)
 	}
+
 	for i := startIdx; i < endIdx; i++ {
 		fe := m.fileEntries[i]
-		isCursor := i == m.fileCursor && m.fileFocus
+		isCursor := i == m.fileCursor
 
-		icon := " "
+		icon := "  "
 		name := fe.Name
 		if fe.IsDir {
-			icon = "▸"
-			name = fe.Name + "/"
+			icon = "> "
 		}
 
-		// Truncate name — pakai rune biar gak motong char aneh
-		runes := []rune(name)
-		maxNameLen := nameColW - 2
-		if maxNameLen < 4 {
-			maxNameLen = 4
-		}
-		if len(runes) > maxNameLen {
-			name = string(runes[:maxNameLen-1]) + "…"
+		maxNameW := innerW - 4
+		if len([]rune(name)) > maxNameW {
+			r := []rune(name)
+			name = string(r[:maxNameW-1]) + "..."
 		}
 
-		sizeStr := ""
-		if fe.IsDir {
-			sizeStr = "DIR"
-		} else {
-			sizeStr = formatSizeShort(fe.Size)
-		}
-
-		nameStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#c0caf5"))
-		if fe.IsDir {
-			nameStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#7dcfff")).Bold(true)
-		}
-		sizeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#9aa5ce"))
-
+		line := icon + name
 		if isCursor {
-			bg := lipgloss.NewStyle().Background(lipgloss.Color("#2a2a3e"))
-			marker := lipgloss.NewStyle().Foreground(lipgloss.Color("#bb9af7")).Bold(true).Render("❯")
-			namePart := fmt.Sprintf("%-*s", nameColW, icon+" "+name)
-			content := nameStyle.Render(namePart)
-			if showSize {
-				sizePart := fmt.Sprintf("%*s", sizeColW, sizeStr)
-				content += " " + sizeStyle.Render(sizePart)
-			}
-			pad := innerW - lipgloss.Width(content) - 2
-			if pad > 0 {
-				content += strings.Repeat(" ", pad)
-			}
-			lines = append(lines, " "+marker+" "+bg.Render(" "+content+" "))
+			line = lipgloss.NewStyle().
+				Background(lipgloss.Color("#7aa2f7")).
+				Foreground(lipgloss.Color("#1a1b26")).
+				Bold(true).
+				Render(" " + line + " ")
+		} else if fe.IsDir {
+			line = " " + lipgloss.NewStyle().Foreground(lipgloss.Color("#7aa2f7")).Render(line)
 		} else {
-			namePart := fmt.Sprintf("%-*s", nameColW, icon+" "+name)
-			line := "   " + nameStyle.Render(namePart)
-			if showSize {
-				sizePart := fmt.Sprintf("%*s", sizeColW, sizeStr)
-				line += " " + sizeStyle.Render(sizePart)
-			}
-			lines = append(lines, line)
+			line = " " + line
 		}
-	}
-	if len(m.fileEntries) == 0 {
-		lines = append(lines, "   "+lipgloss.NewStyle().Foreground(lipgloss.Color("#565f89")).Italic(true).Render("(kosong)"))
+		content.WriteString(line + "\n")
 	}
 
-	for len(lines) < innerH-3 {
-		lines = append(lines, "")
+	rendered := endIdx - startIdx
+	for i := rendered; i < maxRows; i++ {
+		content.WriteString("\n")
 	}
-	modeLabel := "chat"
-	if m.fileFocus {
-		modeLabel = "FILES"
-	}
-	footer := lipgloss.NewStyle().Foreground(lipgloss.Color("#565f89")).Render(
-		" " + modeLabel + "  ·  Tab  ·  Esc")
-	lines = append(lines, "")
-	lines = append(lines, footer)
 
-	borderClr := lipgloss.Color("#414868")
-	if m.fileFocus {
-		borderClr = lipgloss.Color("#7aa2f7")
-	}
-	bgClr := lipgloss.Color("#16161e")
-	if m.fileFocus {
-		bgClr = lipgloss.Color("#1a1a2a")
-	}
+	content.WriteString("\n")
+	content.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#565f89")).Render(" Up/Down Enter Bksp Esc"))
 
 	box := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(borderClr).
-		Background(bgClr).
+		BorderForeground(lipgloss.Color("#7aa2f7")).
 		Padding(0, 1).
-		Width(w - 2).
-		Height(innerH)
-	return box.Render(strings.Join(lines, "\n"))
+		Render(content.String())
+
+	visW := lipgloss.Width(box)
+	visH := lipgloss.Height(box)
+	padX := (w - visW) / 2
+	padY := (h - visH) / 2
+	if padX < 0 {
+		padX = 0
+	}
+	if padY < 0 {
+		padY = 0
+	}
+
+	var out strings.Builder
+	for i := 0; i < padY; i++ {
+		out.WriteString("\n")
+	}
+	out.WriteString(lipgloss.NewStyle().PaddingLeft(padX).Render(box))
+	return out.String()
 }
 
 // formatSizeShort — versi singkat tanpa padding
