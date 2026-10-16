@@ -129,7 +129,7 @@ func cmdBuildAPKFromHTML(htmlFolder, appName string, fullscreen bool) (string, e
 			}
 			return copyDir(htmlFolder, assetsDir)
 		}},
-		{"icon", generateIcons},
+		{"icon", generateIconsGo},
 		{"java", func(c apkConfig) error {
 			if fullscreen {
 				return writeJavaSourcesFullscreen(c)

@@ -91,7 +91,7 @@ func cmdBuildAPKFromURL(targetURL, appName string, opts ...bool) (string, error)
 		fn   func(apkConfig) error
 	}{
 		{"prepare", prepareWorkdir},
-		{"icon", generateIcons},
+		{"icon", generateIconsGo},
 		{"java", writeJavaSources},
 		{"manifest", writeManifest},
 		{"styles", writeStyles},

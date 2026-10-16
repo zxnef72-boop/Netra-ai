@@ -19,3 +19,13 @@ netra-server/netra-server
 
 # Local cache
 .netra-ai/
+
+# Netra build artifacts
+*.bak
+*.bak-*
+*.deb
+apkbuild_test.go
+gomod-*.txt
+*.log
+internal/
+debug.keystore

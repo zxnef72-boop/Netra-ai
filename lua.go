@@ -40,9 +40,7 @@ func (m *Model) handleLua(args []string) {
 	}
 
 	path := args[1]
-	if !filepath.IsAbs(path) {
-		path = filepath.Join(m.currentDir, path)
-	}
+	path = findLuaFile(path, m.currentDir)
 
 	info, err := os.Stat(path)
 	if err != nil {
@@ -766,4 +764,33 @@ func luaValueToGo(v lua.LValue) interface{} {
 	default:
 		return nil
 	}
+}
+
+// findLuaFile — cari file lua di beberapa lokasi fallback.
+// Urutan: absolute path > cwd > currentDir > folder binary > folder binary/lua > ~/netra-ai
+func findLuaFile(path string, currentDir string) string {
+	if filepath.IsAbs(path) {
+		return path
+	}
+
+	cwd, _ := os.Getwd()
+	binDir := filepath.Dir(os.Args[0])
+	home, _ := os.UserHomeDir()
+
+	candidates := []string{
+		filepath.Join(cwd, path),
+		filepath.Join(currentDir, path),
+		filepath.Join(binDir, path),
+		filepath.Join(binDir, "lua", path),
+		filepath.Join(home, "netra-ai", path),
+		filepath.Join(home, "netra-ai", "lua", path),
+	}
+
+	for _, c := range candidates {
+		if info, err := os.Stat(c); err == nil && !info.IsDir() {
+			return c
+		}
+	}
+	// Gak ketemu, balikin path asli biar error message jelas
+	return filepath.Join(currentDir, path)
 }

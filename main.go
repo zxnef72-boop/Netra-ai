@@ -910,13 +910,15 @@ func (m *Model) handleSlash(cmd string) {
 	if cmd == "/build" || strings.HasPrefix(cmd, "/build ") {
 		parts := strings.Fields(strings.TrimPrefix(cmd, "/build"))
 		if len(parts) < 3 {
-			m.messages = append(m.messages, ChatMsg{Role: "assistant", Text: "Pakai: /build <apk|html|native|exe|exe-win> <url|@file> <nama-app>"})
+			m.messages = append(m.messages, ChatMsg{Role: "assistant", Text: "Pakai: /build <apk|apkfast|html|native|exe|exe-win> <url|@file> <nama-app>"})
 			return
 		}
 		kind, targetURL, appName := parts[0], parts[1], strings.Join(parts[2:], " ")
 		var logStr string
 		var err error
-		if kind == "apk" {
+		if kind == "apkfast" {
+			logStr, err = cmdBuildAPKFast(targetURL, appName)
+		} else if kind == "apk" {
 			// Cek flag --fullscreen di appName
 			fs := strings.Contains(strings.ToLower(appName), "--fullscreen")
 			if fs {

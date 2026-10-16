@@ -132,7 +132,7 @@ func cmdBuildAPKFullscreen(targetURL, appName string) (string, error) {
 		fn   func(apkConfig) error
 	}{
 		{"prepare", prepareWorkdir},
-		{"icon", generateIcons},
+		{"icon", generateIconsGo},
 		{"java", writeJavaSourcesPureFullscreen},
 		{"manifest", writeManifestFullscreen},
 		{"styles", writeStyles},

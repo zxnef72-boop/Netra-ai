@@ -346,7 +346,7 @@ func cmdBuildNativeAPK(dataJSONPath, appNameOverride string) (string, error) {
 
 	// 5. Icon (pake generateIcons kalau ada dari apkbuilder.go)
 	iconCfg := apkConfig{WorkDir: workDir, IconPath: ""}
-	if err := generateIcons(iconCfg); err != nil {
+	if err := generateIconsGo(iconCfg); err != nil {
 		log.WriteString("  `→` icon         ⚠ (skip)\n")
 	} else {
 		log.WriteString("  `→` icon         ✓\n")
