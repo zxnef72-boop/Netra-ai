@@ -72,14 +72,14 @@ func packAPK(entries []APKEntry) ([]byte, error) {
 }
 
 // patchConfigJSON — ganti URL di assets/config.json.
-func patchConfigJSON(entries []APKEntry, url string) {
+func patchConfigJSON(entries []APKEntry, url string) []APKEntry {
 	safeURL := strings.ReplaceAll(url, `\`, `\\`)
 	safeURL = strings.ReplaceAll(safeURL, `"`, `\"`)
 	newContent := []byte(fmt.Sprintf(`{"url":"%s"}`, safeURL))
 	for i := range entries {
 		if entries[i].Name == "assets/config.json" {
 			entries[i].Data = newContent
-			return
+			return entries
 		}
 	}
 	entries = append(entries, APKEntry{
@@ -87,6 +87,7 @@ func patchConfigJSON(entries []APKEntry, url string) {
 		Data:   newContent,
 		Method: zip.Deflate,
 	})
+	return entries
 }
 
 // patchIcons — replace 4 icon mipmap. Key: "hdpi", "xhdpi", "xxhdpi", "xxxhdpi".

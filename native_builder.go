@@ -283,7 +283,7 @@ func cmdBuildNativeAPK(dataJSONPath, appNameOverride string) (string, error) {
 
 	// Workdir
 	home, _ := os.UserHomeDir()
-	pkg := "com.netra." + sanitizeName(strings.ToLower(cfg.AppName))
+	pkg := makePackageName(cfg.AppName)
 	workDir := filepath.Join(home, "apk-build", sanitizeName(cfg.AppName)+"_native_"+fmt.Sprintf("%d", time.Now().Unix()))
 	outDir := "/sdcard/NetRatest1/apk-output"
 
@@ -408,12 +408,18 @@ func cmdBuildNativeAPK(dataJSONPath, appNameOverride string) (string, error) {
 	// 10. Sign
 	keystore := filepath.Join(home, ".netra-ai", "netra.keystore")
 	signed := filepath.Join(workDir, "app-signed.apk")
+	aligned := filepath.Join(workDir, "app-aligned.apk")
+	out, err = exec.Command("zipalign", "-f", "4", unsigned, aligned).CombinedOutput()
+	if err != nil {
+		log.WriteString(fmt.Sprintf("  `→` zipalign     GAGAL\n\n```\n%s\n```\n", string(out)))
+		return log.String(), err
+	}
 	signCmd := exec.Command("apksigner", "sign",
 		"--ks", keystore,
 		"--ks-pass", "pass:netra123",
 		"--key-pass", "pass:netra123",
 		"--out", signed,
-		unsigned,
+		aligned,
 	)
 	out, err = signCmd.CombinedOutput()
 	if err != nil {

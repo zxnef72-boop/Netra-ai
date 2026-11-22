@@ -1,276 +1,475 @@
 package main
 
 import (
+	"bytes"
+	"context"
+	"crypto/rand"
+	"crypto/subtle"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
+	"time"
 )
 
-const TOKEN = "rahasia-netra-2026"
-const WORKDIR = "/data/data/com.termux/files/home/netra-ai"
+const (
+	defaultPort    = "8080"
+	termuxWorkdir  = "/data/data/com.termux/files/home/netra-ai"
+	maxReadBytes   = 2 << 20 // 2 MB
+	maxWriteBytes  = 8 << 20 // 8 MB
+	maxRunOutput   = 64 << 10
+	runTimeout     = 60 * time.Second
+	tokenHeader    = "X-Netra-Token"
+	tokenMarkerStr = "__NETRA_TOKEN__"
+)
 
-func auth(r *http.Request) bool {
-	return r.Header.Get("X-Netra-Token") == TOKEN
+var (
+	token    string
+	workDir  string // path asli folder kerja (symlink sudah di-resolve)
+	hostOK   map[string]bool
+	allowed  = map[string]bool{}
+	runAllow = map[string]bool{"go": true, "lua": true, "gofmt": true}
+)
+
+func init() {
+	exts := []string{
+		".go", ".lua", ".py", ".html", ".htm", ".css", ".js", ".java", ".sh", ".bash",
+		".c", ".cpp", ".h", ".hpp", ".rs", ".rb", ".php", ".ts", ".jsx", ".tsx",
+		".json", ".md", ".txt", ".xml", ".yaml", ".yml", ".toml", ".ini", ".conf",
+		".mod", ".sum", ".gitignore", ".csv", ".sql",
+	}
+	for _, e := range exts {
+		allowed[e] = true
+	}
 }
 
-func writeJSON(w http.ResponseWriter, data interface{}) {
-	w.Header().Set("Content-Type", "application/json")
+// ---------- util ----------
+
+func writeJSON(w http.ResponseWriter, code int, data interface{}) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(code)
 	json.NewEncoder(w).Encode(data)
 }
 
-func filesHandler(w http.ResponseWriter, r *http.Request) {
-	if !auth(r) {
-		http.Error(w, "unauthorized", 401)
-		return
+func writeErr(w http.ResponseWriter, code int, msg string) {
+	writeJSON(w, code, map[string]string{"error": msg})
+}
+
+func newToken() string {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		panic(err)
 	}
-	entries, err := os.ReadDir(WORKDIR)
+	return hex.EncodeToString(b)
+}
+
+func getenv(k, def string) string {
+	if v := os.Getenv(k); v != "" {
+		return v
+	}
+	return def
+}
+
+// resolve mengubah path relatif dari UI jadi path absolut di dalam workDir.
+// ".." dibuang secara leksikal, symlink yang keluar dari workDir ditolak,
+// dan folder .git tidak boleh disentuh.
+func resolve(rel string) (string, error) {
+	if strings.ContainsRune(rel, 0) {
+		return "", errors.New("path tidak valid")
+	}
+	clean := filepath.Join(string(filepath.Separator), filepath.FromSlash(rel))
+	for _, part := range strings.Split(clean, string(filepath.Separator)) {
+		if part == ".git" {
+			return "", errors.New("folder .git tidak boleh diakses")
+		}
+	}
+	full := filepath.Join(workDir, clean)
+
+	probe := full
+	for {
+		if _, err := os.Lstat(probe); err == nil {
+			break
+		}
+		parent := filepath.Dir(probe)
+		if parent == probe {
+			break
+		}
+		probe = parent
+	}
+	real, err := filepath.EvalSymlinks(probe)
 	if err != nil {
-		writeJSON(w, map[string]string{"error": err.Error()})
+		return "", err
+	}
+	if real != workDir && !strings.HasPrefix(real, workDir+string(filepath.Separator)) {
+		return "", errors.New("path di luar folder project")
+	}
+	return full, nil
+}
+
+func extOK(name string) bool {
+	return allowed[strings.ToLower(filepath.Ext(name))]
+}
+
+// ---------- middleware ----------
+
+func guard(next http.HandlerFunc, method string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !hostOK[r.Host] {
+			writeErr(w, http.StatusForbidden, "host tidak diizinkan")
+			return
+		}
+		got := r.Header.Get(tokenHeader)
+		if subtle.ConstantTimeCompare([]byte(got), []byte(token)) != 1 {
+			writeErr(w, http.StatusUnauthorized, "token salah atau kadaluarsa, muat ulang halaman")
+			return
+		}
+		if method != "" && r.Method != method {
+			writeErr(w, http.StatusMethodNotAllowed, "method tidak diizinkan")
+			return
+		}
+		next(w, r)
+	}
+}
+
+// ---------- handlers ----------
+
+type entry struct {
+	Name string `json:"name"`
+	Dir  bool   `json:"dir"`
+	Size int64  `json:"size"`
+	Ext  string `json:"ext"`
+}
+
+func filesHandler(w http.ResponseWriter, r *http.Request) {
+	rel := r.URL.Query().Get("d")
+	dir, err := resolve(rel)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
-
-	allowed := map[string]bool{
-		".go": true, ".lua": true, ".py": true, ".html": true, ".htm": true,
-		".css": true, ".js": true, ".java": true, ".sh": true, ".bash": true,
-		".c": true, ".cpp": true, ".h": true, ".hpp": true, ".rs": true,
-		".rb": true, ".php": true, ".ts": true, ".jsx": true, ".tsx": true,
-		".json": true, ".md": true, ".txt": true, ".xml": true,
-		".yaml": true, ".yml": true, ".toml": true, ".ini": true, ".conf": true,
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		writeErr(w, http.StatusNotFound, err.Error())
+		return
 	}
-
-	type FileInfo struct {
-		Name string `json:"name"`
-		Size int64  `json:"size"`
-		Ext  string `json:"ext"`
-	}
-
-	var files []FileInfo
+	out := []entry{}
 	for _, e := range entries {
+		name := e.Name()
 		if e.IsDir() {
+			if name == ".git" {
+				continue
+			}
+			out = append(out, entry{Name: name, Dir: true})
 			continue
 		}
-		ext := strings.ToLower(filepath.Ext(e.Name()))
-		if !allowed[ext] {
+		if !extOK(name) {
 			continue
 		}
 		info, ierr := e.Info()
 		if ierr != nil {
 			continue
 		}
-		files = append(files, FileInfo{Name: e.Name(), Size: info.Size(), Ext: ext})
+		out = append(out, entry{Name: name, Size: info.Size(), Ext: strings.ToLower(filepath.Ext(name))})
 	}
-	writeJSON(w, map[string]interface{}{"files": files, "count": len(files)})
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Dir != out[j].Dir {
+			return out[i].Dir
+		}
+		return strings.ToLower(out[i].Name) < strings.ToLower(out[j].Name)
+	})
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"dir":     filepath.ToSlash(strings.TrimPrefix(rel, "/")),
+		"root":    filepath.Base(workDir),
+		"entries": out,
+	})
 }
 
 func readHandler(w http.ResponseWriter, r *http.Request) {
-	if !auth(r) {
-		http.Error(w, "unauthorized", 401)
+	rel := r.URL.Query().Get("p")
+	if rel == "" {
+		writeErr(w, http.StatusBadRequest, "parameter p kosong")
 		return
 	}
-	name := r.URL.Query().Get("p")
-	if name == "" {
-		writeJSON(w, map[string]string{"error": "missing param p"})
+	if !extOK(rel) {
+		writeErr(w, http.StatusBadRequest, "tipe file tidak didukung")
 		return
 	}
-	// Cegah path traversal
-	if filepath.Base(name) != name {
-		writeJSON(w, map[string]string{"error": "invalid path"})
+	path, err := resolve(rel)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	path := filepath.Join(WORKDIR, name)
+	info, err := os.Stat(path)
+	if err != nil {
+		writeErr(w, http.StatusNotFound, err.Error())
+		return
+	}
+	if info.IsDir() {
+		writeErr(w, http.StatusBadRequest, "ini folder, bukan file")
+		return
+	}
+	if info.Size() > maxReadBytes {
+		writeErr(w, http.StatusRequestEntityTooLarge, "file terlalu besar buat dibuka di editor (maks 2 MB)")
+		return
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		writeJSON(w, map[string]string{"error": err.Error()})
+		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	writeJSON(w, map[string]interface{}{"content": string(data)})
+	writeJSON(w, http.StatusOK, map[string]interface{}{"content": string(data)})
 }
 
 func writeHandler(w http.ResponseWriter, r *http.Request) {
-	if !auth(r) {
-		http.Error(w, "unauthorized", 401)
-		return
-	}
-	if r.Method != "POST" {
-		http.Error(w, "method not allowed", 405)
-		return
-	}
 	var body struct {
 		Name    string `json:"name"`
 		Content string `json:"content"`
 	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxWriteBytes)
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, map[string]string{"error": err.Error()})
+		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if filepath.Base(body.Name) != body.Name {
-		writeJSON(w, map[string]string{"error": "invalid path"})
+	if body.Name == "" || !extOK(body.Name) {
+		writeErr(w, http.StatusBadRequest, "nama atau tipe file tidak valid")
 		return
 	}
-	path := filepath.Join(WORKDIR, body.Name)
+	path, err := resolve(body.Name)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	if err := os.WriteFile(path, []byte(body.Content), 0644); err != nil {
-		writeJSON(w, map[string]string{"error": err.Error()})
+		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	writeJSON(w, map[string]string{"status": "ok"})
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func newfileHandler(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Name    string `json:"name"`
+		Content string `json:"content"`
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxWriteBytes)
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if body.Name == "" {
+		writeErr(w, http.StatusBadRequest, "nama kosong")
+		return
+	}
+	if !extOK(body.Name) {
+		writeErr(w, http.StatusBadRequest, "ekstensi tidak didukung, contoh: baru.go, catatan.md")
+		return
+	}
+	path, err := resolve(body.Name)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if _, err := os.Stat(path); err == nil {
+		writeErr(w, http.StatusConflict, "file udah ada")
+		return
+	}
+	if err := os.WriteFile(path, []byte(body.Content), 0644); err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "path": body.Name})
+}
+
+func mkdirHandler(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Name string `json:"name"`
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<16)
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if strings.TrimSpace(body.Name) == "" {
+		writeErr(w, http.StatusBadRequest, "nama kosong")
+		return
+	}
+	path, err := resolve(body.Name)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := os.MkdirAll(path, 0755); err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "path": body.Name})
+}
+
+type capBuf struct {
+	buf   bytes.Buffer
+	max   int
+	trunc bool
+}
+
+func (c *capBuf) Write(p []byte) (int, error) {
+	room := c.max - c.buf.Len()
+	if room <= 0 {
+		c.trunc = true
+		return len(p), nil
+	}
+	if len(p) > room {
+		c.buf.Write(p[:room])
+		c.trunc = true
+		return len(p), nil
+	}
+	return c.buf.Write(p)
 }
 
 func runHandler(w http.ResponseWriter, r *http.Request) {
-	if !auth(r) {
-		http.Error(w, "unauthorized", 401)
-		return
-	}
-	if r.Method != "POST" {
-		http.Error(w, "method not allowed", 405)
-		return
-	}
 	var body struct {
 		Cmd string `json:"cmd"`
+		Dir string `json:"dir"`
 	}
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<16)
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, map[string]string{"error": err.Error()})
+		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	// Whitelist command
-	allowed := map[string]bool{"go": true, "lua": true, "gofmt": true}
-	parts := []string{}
-	for _, p := range []string{} {
-		_ = p
-	}
-	// Cek command pertama
-	cmdParts := splitArgs(body.Cmd)
-	if len(cmdParts) == 0 || !allowed[cmdParts[0]] {
-		writeJSON(w, map[string]string{"error": "command not allowed"})
+	parts := splitArgs(body.Cmd)
+	if len(parts) == 0 || !runAllow[parts[0]] {
+		writeErr(w, http.StatusForbidden, "command tidak diizinkan, cuma: go, lua, gofmt")
 		return
 	}
-	parts = cmdParts
-	cmd := exec.Command(parts[0], parts[1:]...)
-	cmd.Dir = WORKDIR
-	out, err := cmd.CombinedOutput()
-	writeJSON(w, map[string]interface{}{
-		"output": string(out),
-		"error":  errString(err),
-	})
+	dir, err := resolve(body.Dir)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), runTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, parts[0], parts[1:]...)
+	cmd.Dir = dir
+	cmd.WaitDelay = 2 * time.Second
+	cb := &capBuf{max: maxRunOutput}
+	cmd.Stdout = cb
+	cmd.Stderr = cb
+	runErr := cmd.Run()
+
+	out := cb.buf.String()
+	if cb.trunc {
+		out += "\n[output dipotong di 64 KB]"
+	}
+	msg := ""
+	if runErr != nil {
+		msg = runErr.Error()
+		if ctx.Err() == context.DeadlineExceeded {
+			msg = "dihentikan: lebih dari 60 detik"
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"output": out, "error": msg})
 }
 
 func splitArgs(s string) []string {
 	var args []string
-	var cur string
+	var cur strings.Builder
 	inQuote := false
 	for _, r := range s {
 		switch {
 		case r == '"':
 			inQuote = !inQuote
-		case r == ' ' && !inQuote:
-			if cur != "" {
-				args = append(args, cur)
-				cur = ""
+		case (r == ' ' || r == '\t') && !inQuote:
+			if cur.Len() > 0 {
+				args = append(args, cur.String())
+				cur.Reset()
 			}
 		default:
-			cur += string(r)
+			cur.WriteRune(r)
 		}
 	}
-	if cur != "" {
-		args = append(args, cur)
+	if cur.Len() > 0 {
+		args = append(args, cur.String())
 	}
 	return args
 }
 
-func errString(err error) string {
-	if err == nil {
-		return ""
-	}
-	return err.Error()
-}
-
-func mkdirHandler(w http.ResponseWriter, r *http.Request) {
-	if !auth(r) {
-		http.Error(w, "unauthorized", 401)
+func indexHandler(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/" {
+		http.NotFound(w, r)
 		return
 	}
-	if r.Method != "POST" {
-		http.Error(w, "method not allowed", 405)
+	if !hostOK[r.Host] {
+		http.Error(w, "host tidak diizinkan", http.StatusForbidden)
 		return
 	}
-	var body struct {
-		Name string `json:"name"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, map[string]string{"error": err.Error()})
-		return
-	}
-	if body.Name == "" {
-		writeJSON(w, map[string]string{"error": "nama kosong"})
-		return
-	}
-	// Tolak path naik keluar
-	if filepath.IsAbs(body.Name) || filepath.Base(body.Name) != body.Name && !validRelPath(body.Name) {
-		writeJSON(w, map[string]string{"error": "invalid path"})
-		return
-	}
-	path := filepath.Join(WORKDIR, body.Name)
-	if err := os.MkdirAll(path, 0755); err != nil {
-		writeJSON(w, map[string]string{"error": err.Error()})
-		return
-	}
-	writeJSON(w, map[string]string{"status": "ok", "path": body.Name})
-}
-
-func newfileHandler(w http.ResponseWriter, r *http.Request) {
-	if !auth(r) {
-		http.Error(w, "unauthorized", 401)
-		return
-	}
-	if r.Method != "POST" {
-		http.Error(w, "method not allowed", 405)
-		return
-	}
-	var body struct {
-		Name    string `json:"name"`
-		Content string `json:"content"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, map[string]string{"error": err.Error()})
-		return
-	}
-	if body.Name == "" {
-		writeJSON(w, map[string]string{"error": "nama kosong"})
-		return
-	}
-	path := filepath.Join(WORKDIR, body.Name)
-	// Bikin parent folder kalau belum ada
-	if dir := filepath.Dir(path); dir != WORKDIR {
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			writeJSON(w, map[string]string{"error": err.Error()})
-			return
-		}
-	}
-	if _, err := os.Stat(path); err == nil {
-		writeJSON(w, map[string]string{"error": "file udah ada"})
-		return
-	}
-	if err := os.WriteFile(path, []byte(body.Content), 0644); err != nil {
-		writeJSON(w, map[string]string{"error": err.Error()})
-		return
-	}
-	writeJSON(w, map[string]string{"status": "ok", "path": body.Name})
-}
-
-func validRelPath(p string) bool {
-	// Cegah ../
-	return !strings.Contains(p, "..")
+	page := bytes.Replace(uiHTML, []byte(tokenMarkerStr), []byte(token), 1)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("X-Frame-Options", "DENY")
+	w.Header().Set("Referrer-Policy", "no-referrer")
+	w.Write(page)
 }
 
 func main() {
-	http.HandleFunc("/api/files", filesHandler)
-	http.HandleFunc("/api/read", readHandler)
-	http.HandleFunc("/api/write", writeHandler)
-	http.HandleFunc("/api/run", runHandler)
-	http.HandleFunc("/api/mkdir", mkdirHandler)
-	http.HandleFunc("/api/newfile", newfileHandler)
-	println("Netra server listening on 127.0.0.1:8080")
-	http.ListenAndServe("0.0.0.0:8080", nil)
+	port := getenv("NETRA_PORT", defaultPort)
+	addr := "127.0.0.1:" + port
+	hostOK = map[string]bool{
+		"127.0.0.1:" + port: true,
+		"localhost:" + port: true,
+	}
+
+	token = getenv("NETRA_TOKEN", "")
+	if token == "" {
+		token = newToken()
+	}
+
+	wd := getenv("NETRA_WORKDIR", "")
+	if wd == "" {
+		if st, err := os.Stat(termuxWorkdir); err == nil && st.IsDir() {
+			wd = termuxWorkdir
+		} else {
+			wd, _ = os.Getwd()
+		}
+	}
+	real, err := filepath.EvalSymlinks(wd)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "folder kerja tidak bisa dibuka:", err)
+		os.Exit(1)
+	}
+	workDir = real
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", indexHandler)
+	mux.HandleFunc("/api/files", guard(filesHandler, http.MethodGet))
+	mux.HandleFunc("/api/read", guard(readHandler, http.MethodGet))
+	mux.HandleFunc("/api/write", guard(writeHandler, http.MethodPost))
+	mux.HandleFunc("/api/newfile", guard(newfileHandler, http.MethodPost))
+	mux.HandleFunc("/api/mkdir", guard(mkdirHandler, http.MethodPost))
+	mux.HandleFunc("/api/run", guard(runHandler, http.MethodPost))
+
+	srv := &http.Server{
+		Addr:              addr,
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      90 * time.Second,
+	}
+
+	fmt.Println("Netra server jalan di http://" + addr)
+	fmt.Println("Folder kerja:", workDir)
+	if err := srv.ListenAndServe(); err != nil {
+		fmt.Fprintln(os.Stderr, "server berhenti:", err)
+		os.Exit(1)
+	}
 }

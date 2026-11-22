@@ -84,6 +84,12 @@ func cmdBuildAPKFromHTML(htmlFolder, appName string, fullscreen bool) (string, e
 		}
 	}
 
+	// Semua mode (termasuk --fullscreen) lewat template + pure Go, gak butuh Java.
+	return htmlFastBuild(htmlFolder, indexPath, appName, fullscreen, &log)
+}
+
+// cmdBuildAPKFromHTMLJava — jalur lama (compile Java), disimpan buat referensi.
+func cmdBuildAPKFromHTMLJava(htmlFolder, indexPath, appName string, fullscreen bool, log *strings.Builder) (string, error) {
 	home, _ := os.UserHomeDir()
 	pkg := "com.netra." + sanitizeName(strings.ToLower(appName))
 	workDir := filepath.Join(home, "apk-build", sanitizeName(appName)+"_html_"+fmt.Sprintf("%d", time.Now().Unix()))

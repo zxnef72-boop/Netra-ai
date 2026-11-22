@@ -117,6 +117,10 @@ Safety:
 - Loop detection max 8 steps
 - Output limit 5-8KB
 
+Progres live: selama agent kerja, chat menampilkan checklist langkah:
+spinner = jalan, centang = berhasil (+ ukuran/jumlah baris), silang = gagal (+ alasan), titik = antri.
+Event dikirim dari agent.go lewat hook (agent_progress.go), ditangkap di ui_anim.go, digambar di ui_opencode.go.
+
 Requirement: OpenAI-compat provider (bukan eliza-1966).
 
 ---
@@ -143,6 +147,26 @@ Path: $PREFIX/var/lib/proot-distro/containers/
 - html crawl X — multi-page mirror
 
 Output: /sdcard/AiNef/
+
+---
+
+## Build APK dari HTML
+
+    /build html /sdcard/NefPlayer nef-player [--fullscreen]
+
+Folder wajib punya index.html. Semua isi folder (css, js, gambar, subfolder) ikut masuk ke APK.
+Tanpa Java: pakai template base.apk (embed), tambah assets/www/, ganti config.json jadi
+file:///android_asset/www/index.html, tanda tangan v1 pure Go. Output: /sdcard/NetRatest1/apk-output/
+
+- --fullscreen: ganti tema manifest jadi Theme.NoTitleBar.Fullscreen (status bar hilang)
+- Izin READ_MEDIA_AUDIO / READ_EXTERNAL_STORAGE ditambah otomatis; app minta izin audio saat dibuka
+- Nama paket sama untuk semua hasil (com.netra.template): memasang dua app saling menimpa
+- "Pilih file" di halaman web jalan; "Pilih folder" tidak (tidak didukung WebView)
+
+Update template (sekali, butuh ecj/javac + d8 + zip + android.jar di ~/android-sdk/android.jar):
+
+    bash template-src/build_template.sh ~/netra-ai
+    go build -o netra-ai-bin .
 
 ---
 

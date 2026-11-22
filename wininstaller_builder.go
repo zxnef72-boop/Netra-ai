@@ -91,7 +91,7 @@ import (
         "unsafe"
 )
 
-//go:embed payload
+//go:embed all:payload
 var payloadFS embed.FS
 
 const AppName = "__APPNAME__"

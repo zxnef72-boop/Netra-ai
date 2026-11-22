@@ -89,7 +89,7 @@ func cmdBuildAPKFullscreen(targetURL, appName string) (string, error) {
 		versionCode = code
 	}
 
-	pkg := "com.netra." + sanitizeName(strings.ToLower(appName))
+	pkg := makePackageName(appName)
 	workDir := filepath.Join(home, "apk-build", sanitizeName(appName)+"_"+fmt.Sprintf("%d", time.Now().Unix()))
 	outDir := os.Getenv("NETRA_OUT_DIR")
 	if outDir == "" {

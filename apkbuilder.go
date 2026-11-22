@@ -47,7 +47,7 @@ func cmdBuildAPKFromURL(targetURL, appName string, opts ...bool) (string, error)
 		versionCode = code
 	}
 
-	pkg := "com.netra." + sanitizeName(strings.ToLower(appName))
+	pkg := makePackageName(appName)
 	workDir := filepath.Join(home, "apk-build", sanitizeName(appName)+"_"+fmt.Sprintf("%d", time.Now().Unix()))
 	outDir := os.Getenv("NETRA_OUT_DIR")
 	if outDir == "" {
@@ -657,7 +657,12 @@ func convertToDex(cfg apkConfig) error {
 		return fmt.Errorf("gak ada .class file di %s", classesDir)
 	}
 
-	dexArgs = append(dexArgs, classFiles...)
+	if dexBin == "dx" {
+		// dx: kasih FOLDER classes (bukan file satu-satu) biar nama class cocok sama path.
+		dexArgs = append(dexArgs, classesDir)
+	} else {
+		dexArgs = append(dexArgs, classFiles...)
+	}
 	cmd := exec.Command(dexBin, dexArgs...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -719,7 +724,13 @@ func signAPK(cfg apkConfig) error {
 	}
 
 	unsignedAPK := filepath.Join(cfg.WorkDir, "app-unsigned.apk")
+	alignedAPK := filepath.Join(cfg.WorkDir, "app-aligned.apk")
 	signedAPK := filepath.Join(cfg.WorkDir, "app-signed.apk")
+
+	// targetSdk >= 30: resources.arsc wajib 4-byte aligned. Align SEBELUM sign.
+	if out, err := exec.Command("zipalign", "-f", "4", unsignedAPK, alignedAPK).CombinedOutput(); err != nil {
+		return fmt.Errorf("zipalign: %v\n%s", err, string(out))
+	}
 
 	cmd := exec.Command("apksigner", "sign",
 		"--ks", keystore,
@@ -729,13 +740,12 @@ func signAPK(cfg apkConfig) error {
 		"--v2-signing-enabled", "true",
 		"--v3-signing-enabled", "true",
 		"--out", signedAPK,
-		unsignedAPK,
+		alignedAPK,
 	)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		_ = out
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("apksigner: %v\n%s", err, string(out))
 	}
-	return err
+	return nil
 }
 
 func generateKeystore(keystore string) error {
@@ -749,11 +759,10 @@ func generateKeystore(keystore string) error {
 		"-keypass", "netra123",
 		"-dname", "CN=NetRa, OU=Dev, O=NetRa, L=Jakarta, C=ID",
 	)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		_ = out
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("keytool: %v\n%s", err, string(out))
 	}
-	return err
+	return nil
 }
 
 func copyFile(src, dst string) error {

@@ -1,0 +1,118 @@
+diff --git a/apkbuilder.go b/apkbuilder.go
+index 2c96ef0..09d46a6 100644
+--- a/apkbuilder.go
++++ b/apkbuilder.go
+@@ -47,7 +47,7 @@ func cmdBuildAPKFromURL(targetURL, appName string, opts ...bool) (string, error)
+ 		versionCode = code
+ 	}
+ 
+-	pkg := "com.netra." + sanitizeName(strings.ToLower(appName))
++	pkg := makePackageName(appName)
+ 	workDir := filepath.Join(home, "apk-build", sanitizeName(appName)+"_"+fmt.Sprintf("%d", time.Now().Unix()))
+ 	outDir := os.Getenv("NETRA_OUT_DIR")
+ 	if outDir == "" {
+@@ -657,7 +657,12 @@ func convertToDex(cfg apkConfig) error {
+ 		return fmt.Errorf("gak ada .class file di %s", classesDir)
+ 	}
+ 
+-	dexArgs = append(dexArgs, classFiles...)
++	if dexBin == "dx" {
++		// dx: kasih FOLDER classes (bukan file satu-satu) biar nama class cocok sama path.
++		dexArgs = append(dexArgs, classesDir)
++	} else {
++		dexArgs = append(dexArgs, classFiles...)
++	}
+ 	cmd := exec.Command(dexBin, dexArgs...)
+ 	out, err := cmd.CombinedOutput()
+ 	if err != nil {
+diff --git a/apkbuilder_fs.go b/apkbuilder_fs.go
+index 1c8691d..c55b61f 100644
+--- a/apkbuilder_fs.go
++++ b/apkbuilder_fs.go
+@@ -89,7 +89,7 @@ func cmdBuildAPKFullscreen(targetURL, appName string) (string, error) {
+ 		versionCode = code
+ 	}
+ 
+-	pkg := "com.netra." + sanitizeName(strings.ToLower(appName))
++	pkg := makePackageName(appName)
+ 	workDir := filepath.Join(home, "apk-build", sanitizeName(appName)+"_"+fmt.Sprintf("%d", time.Now().Unix()))
+ 	outDir := os.Getenv("NETRA_OUT_DIR")
+ 	if outDir == "" {
+diff --git a/apkbuilder_html.go b/apkbuilder_html.go
+index dc0c852..f1ee2ba 100644
+--- a/apkbuilder_html.go
++++ b/apkbuilder_html.go
+@@ -85,7 +85,7 @@ func cmdBuildAPKFromHTML(htmlFolder, appName string, fullscreen bool) (string, e
+ 	}
+ 
+ 	home, _ := os.UserHomeDir()
+-	pkg := "com.netra." + sanitizeName(strings.ToLower(appName))
++	pkg := makePackageName(appName)
+ 	workDir := filepath.Join(home, "apk-build", sanitizeName(appName)+"_html_"+fmt.Sprintf("%d", time.Now().Unix()))
+ 	outDir := "/sdcard/NetRatest1/apk-output"
+ 	os.MkdirAll(outDir, 0755)
+@@ -127,7 +127,14 @@ func cmdBuildAPKFromHTML(htmlFolder, appName string, fullscreen bool) (string, e
+ 			if err := os.MkdirAll(assetsDir, 0755); err != nil {
+ 				return err
+ 			}
+-			return copyDir(htmlFolder, assetsDir)
++			if err := copyDir(htmlFolder, assetsDir); err != nil {
++				return err
++			}
++			// TargetURL selalu index.html; kalau sumbernya index.htm, salin juga
++			if _, e := os.Stat(filepath.Join(assetsDir, "index.html")); e != nil {
++				return copyFile(indexPath, filepath.Join(assetsDir, "index.html"))
++			}
++			return nil
+ 		}},
+ 		{"icon", generateIconsGo},
+ 		{"java", func(c apkConfig) error {
+diff --git a/apkidentity.go b/apkidentity.go
+index 7c222d0..ae00011 100644
+--- a/apkidentity.go
++++ b/apkidentity.go
+@@ -15,6 +15,21 @@ const (
+ 	templateLabel   = "NetraApp"
+ )
+ 
++// javaKeywords -- segmen package gak boleh sama dengan keyword Java.
++var javaKeywords = map[string]bool{
++	"abstract": true, "assert": true, "boolean": true, "break": true, "byte": true,
++	"case": true, "catch": true, "char": true, "class": true, "const": true,
++	"continue": true, "default": true, "do": true, "double": true, "else": true,
++	"enum": true, "extends": true, "final": true, "finally": true, "float": true,
++	"for": true, "goto": true, "if": true, "implements": true, "import": true,
++	"instanceof": true, "int": true, "interface": true, "long": true, "native": true,
++	"new": true, "package": true, "private": true, "protected": true, "public": true,
++	"return": true, "short": true, "static": true, "strictfp": true, "super": true,
++	"switch": true, "synchronized": true, "this": true, "throw": true, "throws": true,
++	"transient": true, "try": true, "void": true, "volatile": true, "while": true,
++	"true": true, "false": true, "null": true,
++}
++
+ // makePackageName -- "com.netra.<nama>" yang valid buat Android.
+ func makePackageName(appName string) string {
+ 	var sb strings.Builder
+@@ -36,6 +51,9 @@ func makePackageName(appName string) string {
+ 	if seg[0] >= '0' && seg[0] <= '9' {
+ 		seg = "app" + seg
+ 	}
++	if javaKeywords[seg] {
++		seg = "app_" + seg
++	}
+ 	return "com.netra." + seg
+ }
+ 
+diff --git a/native_builder.go b/native_builder.go
+index 5d3c81f..f31c457 100644
+--- a/native_builder.go
++++ b/native_builder.go
+@@ -283,7 +283,7 @@ func cmdBuildNativeAPK(dataJSONPath, appNameOverride string) (string, error) {
+ 
+ 	// Workdir
+ 	home, _ := os.UserHomeDir()
+-	pkg := "com.netra." + sanitizeName(strings.ToLower(cfg.AppName))
++	pkg := makePackageName(cfg.AppName)
+ 	workDir := filepath.Join(home, "apk-build", sanitizeName(cfg.AppName)+"_native_"+fmt.Sprintf("%d", time.Now().Unix()))
+ 	outDir := "/sdcard/NetRatest1/apk-output"
+ 

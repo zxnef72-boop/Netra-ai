@@ -39,9 +39,17 @@ Agent yang bisa baca, tulis, list, dan jalanin command sendiri. Loop sampai sele
 - `/agent <prompt>` — jalanin agent
 - `/agent-unsafe on` — izinin write + run command
 - Tools: read_file, write_file, list_dir, run_command
+- Progres live: tiap langkah tampil sebagai checklist (spinner jalan, centang ok, silang gagal + alasan)
 - Safety: path restriction /sdcard/AiNef, loop detection max 8 step, output 5-8KB
 
 Butuh provider OpenAI-compatible (Groq, OpenRouter, Ollama). Belum support Gemini.
+
+### Build APK dari HTML (tanpa Java)
+
+`/build html <folder> <nama> [--fullscreen]` bikin APK offline dari folder HTML, tanpa JDK/aapt/d8.
+Pakai template `base.apk` yang ditanam di binary: file masuk ke `assets/www/`, lalu tanda tangan ulang (pure Go).
+Template (kode Java-nya) ada di `template-src/`, dibuild ulang sekali pakai `build_template.sh`.
+Tombol "Pilih file" di halaman web didukung; "Pilih folder" (showDirectoryPicker/webkitdirectory) belum, WebView Android tidak mendukung.
 
 ### HTML Toolkit
 

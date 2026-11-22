@@ -29,7 +29,11 @@ func buildAPKFromTemplate(targetURL, appName, iconPath string) ([]byte, error) {
 		return nil, fmt.Errorf("extract template: %w", err)
 	}
 
-	patchConfigJSON(entries, targetURL)
+	if err := patchTemplateIdentity(entries, appName); err != nil {
+		return nil, fmt.Errorf("patch identitas: %w", err)
+	}
+
+	entries = patchConfigJSON(entries, targetURL)
 
 	icons, err := generateIconsBytes(appName, iconPath)
 	if err != nil {

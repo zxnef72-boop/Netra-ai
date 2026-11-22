@@ -52,6 +52,31 @@ Langkah:
 10. Download apk-NamaApp
 11. Extract zip, install APK
 
+## Build APK dari folder HTML (tanpa Java)
+
+    /build html /sdcard/NefPlayer nef-player
+
+Folder harus punya index.html. Hasil di /sdcard/NetRatest1/apk-output/nef-player.apk.
+Tidak butuh JDK, aapt, atau d8: Netra pakai template base.apk yang sudah ditanam di binary.
+
+Tambah --fullscreen untuk menyembunyikan status bar.
+
+### Update template (sekali)
+
+Kode Java template ada di template-src/MainActivity.java. Kalau diubah:
+
+    pkg install ecj d8 zip
+    bash template-src/build_template.sh ~/netra-ai
+    cd ~/netra-ai && go build -o netra-ai-bin .
+
+Butuh android.jar di ~/android-sdk/android.jar (atau set ANDROID_JAR=...).
+base.apk lama dicadangkan sebagai base.apk.bak.
+
+### Batasan
+
+- "Pilih folder" di halaman web tidak jalan (WebView Android tidak mendukung). Pakai "Pilih file".
+- Semua APK hasil build punya nama paket sama (com.netra.template).
+
 ## Kustomisasi
 
 Bikin APK fullscreen dari HTML lokal:

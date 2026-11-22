@@ -294,6 +294,7 @@ func cmdAgentRun(userPrompt string, cwd string, provider Provider) (string, erro
 	repeatCount := 0
 
 	for step := 1; step <= maxSteps; step++ {
+		agentEmit("think", "", fmt.Sprintf("model mikir (langkah %d)", step), "")
 		reqBody := map[string]interface{}{
 			"model":       provider.Model,
 			"messages":    messages,
@@ -397,9 +398,18 @@ func cmdAgentRun(userPrompt string, cwd string, provider Provider) (string, erro
 			repeatCount = 0
 		}
 
+		// daftar semua langkah di giliran ini dulu (biar checklist langsung penuh)
+		for _, tc0 := range msg.ToolCalls {
+			var a0 map[string]interface{}
+			json.Unmarshal([]byte(tc0.Function.Arguments), &a0)
+			agentEmit("plan", tc0.Function.Name, agentLabel(tc0.Function.Name, a0, cwd), "")
+		}
+
 		for _, tc := range msg.ToolCalls {
 			var args map[string]interface{}
 			json.Unmarshal([]byte(tc.Function.Arguments), &args)
+			stepLabel := agentLabel(tc.Function.Name, args, cwd)
+			agentEmit("start", tc.Function.Name, stepLabel, "")
 
 			shortArgs := tc.Function.Arguments
 			if len(shortArgs) > 60 {
@@ -407,6 +417,11 @@ func cmdAgentRun(userPrompt string, cwd string, provider Provider) (string, erro
 			}
 
 			result := agentExecTool(tc.Function.Name, args, cwd)
+			if okStep, det := agentOutcome(tc.Function.Name, result); okStep {
+				agentEmit("ok", tc.Function.Name, stepLabel, det)
+			} else {
+				agentEmit("fail", tc.Function.Name, stepLabel, det)
+			}
 
 			// Compact summary per tool (Codex-style)
 			var summary string

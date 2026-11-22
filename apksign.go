@@ -126,7 +126,9 @@ func buildManifest(entries []APKEntry) []byte {
 	sb.WriteString("Created-By: 1.0 (Netra)\r\n")
 	sb.WriteString("\r\n")
 	for _, e := range entries {
-		if strings.HasPrefix(e.Name, "META-INF/") {
+		// File signature lama udah dibuang removeSignatureFiles; sisanya
+		// (mis. META-INF/com/android/...) wajib ikut ditandatangani.
+		if strings.HasSuffix(e.Name, "/") {
 			continue
 		}
 		h := sha256.Sum256(e.Data)

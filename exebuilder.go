@@ -51,6 +51,8 @@ func main() {
 		"C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
 		"C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
 		"msedge.exe",
+		"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+		"C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
 		"chrome.exe",
 	}
 
@@ -77,7 +79,6 @@ RequestExecutionLevel user
 
 !define MUI_ABORTWARNING
 !insertmacro MUI_PAGE_WELCOME
-!insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
 !insertmacro MUI_PAGE_FINISH
 !insertmacro MUI_UNPAGE_CONFIRM
@@ -87,7 +88,7 @@ RequestExecutionLevel user
 Section "Install"
     SetOutPath "$INSTDIR"
     File "__EXENAME__"
-    File "index.html"
+    File /r /x "installer.nsi" /x "Setup.exe" /x "viewer" /x "__EXENAME__" "*"
 
     WriteRegStr HKCU "Software\__APPNAME__" "InstallDir" "$INSTDIR"
 
@@ -106,10 +107,7 @@ Section "Install"
 SectionEnd
 
 Section "Uninstall"
-    Delete "$INSTDIR\__EXENAME__"
-    Delete "$INSTDIR\index.html"
-    Delete "$INSTDIR\uninstall.exe"
-    RMDir "$INSTDIR"
+    RMDir /r "$INSTDIR"
 
     Delete "$DESKTOP\__APPNAME__.lnk"
     Delete "$SMPROGRAMS\__APPNAME__\__APPNAME__.lnk"

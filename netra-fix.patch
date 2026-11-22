@@ -1,0 +1,499 @@
+diff --git a/apkbuild_template.go b/apkbuild_template.go
+index 0162e89..53e1395 100644
+--- a/apkbuild_template.go
++++ b/apkbuild_template.go
+@@ -29,7 +29,11 @@ func buildAPKFromTemplate(targetURL, appName, iconPath string) ([]byte, error) {
+ 		return nil, fmt.Errorf("extract template: %w", err)
+ 	}
+ 
+-	patchConfigJSON(entries, targetURL)
++	if err := patchTemplateIdentity(entries, appName); err != nil {
++		return nil, fmt.Errorf("patch identitas: %w", err)
++	}
++
++	entries = patchConfigJSON(entries, targetURL)
+ 
+ 	icons, err := generateIconsBytes(appName, iconPath)
+ 	if err != nil {
+diff --git a/apkbuilder.go b/apkbuilder.go
+index eb8f00c..2c96ef0 100644
+--- a/apkbuilder.go
++++ b/apkbuilder.go
+@@ -719,8 +719,14 @@ func signAPK(cfg apkConfig) error {
+ 	}
+ 
+ 	unsignedAPK := filepath.Join(cfg.WorkDir, "app-unsigned.apk")
++	alignedAPK := filepath.Join(cfg.WorkDir, "app-aligned.apk")
+ 	signedAPK := filepath.Join(cfg.WorkDir, "app-signed.apk")
+ 
++	// targetSdk >= 30: resources.arsc wajib 4-byte aligned. Align SEBELUM sign.
++	if out, err := exec.Command("zipalign", "-f", "4", unsignedAPK, alignedAPK).CombinedOutput(); err != nil {
++		return fmt.Errorf("zipalign: %v\n%s", err, string(out))
++	}
++
+ 	cmd := exec.Command("apksigner", "sign",
+ 		"--ks", keystore,
+ 		"--ks-pass", "pass:netra123",
+@@ -729,13 +735,12 @@ func signAPK(cfg apkConfig) error {
+ 		"--v2-signing-enabled", "true",
+ 		"--v3-signing-enabled", "true",
+ 		"--out", signedAPK,
+-		unsignedAPK,
++		alignedAPK,
+ 	)
+-	out, err := cmd.CombinedOutput()
+-	if err != nil {
+-		_ = out
++	if out, err := cmd.CombinedOutput(); err != nil {
++		return fmt.Errorf("apksigner: %v\n%s", err, string(out))
+ 	}
+-	return err
++	return nil
+ }
+ 
+ func generateKeystore(keystore string) error {
+@@ -749,11 +754,10 @@ func generateKeystore(keystore string) error {
+ 		"-keypass", "netra123",
+ 		"-dname", "CN=NetRa, OU=Dev, O=NetRa, L=Jakarta, C=ID",
+ 	)
+-	out, err := cmd.CombinedOutput()
+-	if err != nil {
+-		_ = out
++	if out, err := cmd.CombinedOutput(); err != nil {
++		return fmt.Errorf("keytool: %v\n%s", err, string(out))
+ 	}
+-	return err
++	return nil
+ }
+ 
+ func copyFile(src, dst string) error {
+diff --git a/apkbuilder_html.go b/apkbuilder_html.go
+index 3acdbd8..dc0c852 100644
+--- a/apkbuilder_html.go
++++ b/apkbuilder_html.go
+@@ -195,8 +195,7 @@ func packageAPKWithAssets(cfg apkConfig) error {
+ 	cmd2.Dir = cfg.WorkDir
+ 	out2, err := cmd2.CombinedOutput()
+ 	if err != nil {
+-		fmt.Println(string(out2))
+-		return err
++		return fmt.Errorf("aapt add classes.dex: %v\n%s", err, string(out2))
+ 	}
+ 	return nil
+ }
+diff --git a/apkidentity.go b/apkidentity.go
+new file mode 100644
+index 0000000..7c222d0
+--- /dev/null
++++ b/apkidentity.go
+@@ -0,0 +1,263 @@
++// apkidentity.go -- ganti package name + label di template APK (pure Go).
++// Manifest: string pool UTF-16 (atribut package).
++// resources.arsc: string pool UTF-8 (string/app_name) + nama package tabel.
++package main
++
++import (
++	"encoding/binary"
++	"fmt"
++	"strings"
++	"unicode/utf16"
++)
++
++const (
++	templatePackage = "com.netra.template"
++	templateLabel   = "NetraApp"
++)
++
++// makePackageName -- "com.netra.<nama>" yang valid buat Android.
++func makePackageName(appName string) string {
++	var sb strings.Builder
++	for _, r := range strings.ToLower(appName) {
++		switch {
++		case (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9'):
++			sb.WriteRune(r)
++		case r == '_' || r == ' ' || r == '-':
++			sb.WriteRune('_')
++		}
++	}
++	seg := strings.Trim(sb.String(), "_")
++	if len(seg) > 40 {
++		seg = seg[:40]
++	}
++	if seg == "" {
++		seg = "app"
++	}
++	if seg[0] >= '0' && seg[0] <= '9' {
++		seg = "app" + seg
++	}
++	return "com.netra." + seg
++}
++
++func le16(b []byte) int { return int(binary.LittleEndian.Uint16(b)) }
++func le32(b []byte) int { return int(binary.LittleEndian.Uint32(b)) }
++
++func putLE32(b []byte, v int) { binary.LittleEndian.PutUint32(b, uint32(v)) }
++
++func readLen8(b []byte) (int, int) {
++	if len(b) < 2 {
++		return 0, 1
++	}
++	if b[0]&0x80 != 0 {
++		return int(b[0]&0x7f)<<8 | int(b[1]), 2
++	}
++	return int(b[0]), 1
++}
++
++func readLen16(b []byte) (int, int) {
++	if len(b) < 4 {
++		return le16(b), 2
++	}
++	v := le16(b)
++	if v&0x8000 != 0 {
++		return (v&0x7fff)<<16 | le16(b[2:]), 4
++	}
++	return v, 2
++}
++
++func readPoolString(b []byte, off int, isUTF8 bool) (string, error) {
++	if off < 0 || off+2 > len(b) {
++		return "", fmt.Errorf("offset string di luar chunk")
++	}
++	if isUTF8 {
++		_, n1 := readLen8(b[off:])
++		l8, n2 := readLen8(b[off+n1:])
++		start := off + n1 + n2
++		if start+l8 > len(b) {
++			return "", fmt.Errorf("string utf8 kepanjangan")
++		}
++		return string(b[start : start+l8]), nil
++	}
++	l, n := readLen16(b[off:])
++	start := off + n
++	if start+l*2 > len(b) {
++		return "", fmt.Errorf("string utf16 kepanjangan")
++	}
++	u := make([]uint16, l)
++	for i := range u {
++		u[i] = binary.LittleEndian.Uint16(b[start+i*2:])
++	}
++	return string(utf16.Decode(u)), nil
++}
++
++func appendLen8(b []byte, v int) []byte {
++	if v > 0x7f {
++		return append(b, byte(v>>8)|0x80, byte(v))
++	}
++	return append(b, byte(v))
++}
++
++func appendPoolString(b []byte, s string, isUTF8 bool) []byte {
++	u := utf16.Encode([]rune(s))
++	if isUTF8 {
++		raw := []byte(s)
++		b = appendLen8(b, len(u))
++		b = appendLen8(b, len(raw))
++		b = append(b, raw...)
++		return append(b, 0)
++	}
++	if len(u) > 0x7fff {
++		hi := len(u) >> 16
++		b = append(b, byte(hi), byte(hi>>8)|0x80, byte(len(u)), byte(len(u)>>8))
++	} else {
++		b = append(b, byte(len(u)), byte(len(u)>>8))
++	}
++	for _, v := range u {
++		b = append(b, byte(v), byte(v>>8))
++	}
++	return append(b, 0, 0)
++}
++
++// rewritePool -- bangun ulang 1 chunk string pool, tiap string lewat fn.
++// Index string TIDAK berubah, jadi referensi dari chunk lain tetap valid.
++func rewritePool(chunk []byte, fn func(string) string) ([]byte, error) {
++	if len(chunk) < 28 || le16(chunk) != 0x0001 {
++		return nil, fmt.Errorf("bukan string pool")
++	}
++	hdr := le16(chunk[2:])
++	count := le32(chunk[8:])
++	styles := le32(chunk[12:])
++	flags := le32(chunk[16:])
++	strStart := le32(chunk[20:])
++	if styles != 0 {
++		return nil, fmt.Errorf("string pool punya style, belum didukung")
++	}
++	if hdr+count*4 > len(chunk) {
++		return nil, fmt.Errorf("tabel offset string rusak")
++	}
++	isUTF8 := flags&0x100 != 0
++
++	var body []byte
++	offsets := make([]int, count)
++	for i := 0; i < count; i++ {
++		s, err := readPoolString(chunk, strStart+le32(chunk[hdr+i*4:]), isUTF8)
++		if err != nil {
++			return nil, err
++		}
++		offsets[i] = len(body)
++		body = appendPoolString(body, fn(s), isUTF8)
++	}
++	for len(body)%4 != 0 {
++		body = append(body, 0)
++	}
++
++	newStart := hdr + count*4
++	out := make([]byte, newStart, newStart+len(body))
++	copy(out, chunk[:hdr])
++	for i, o := range offsets {
++		putLE32(out[hdr+i*4:], o)
++	}
++	out = append(out, body...)
++	putLE32(out[4:], len(out))
++	putLE32(out[20:], newStart)
++	return out, nil
++}
++
++// patchAXMLPackage -- ganti atribut package di AndroidManifest.xml biner.
++// Nama class activity tetap pakai package lama (cocok sama classes.dex).
++func patchAXMLPackage(data []byte, oldPkg, newPkg string) ([]byte, error) {
++	if len(data) < 16 || le16(data) != 0x0003 {
++		return nil, fmt.Errorf("bukan AXML")
++	}
++	poolSize := le32(data[12:])
++	if poolSize < 28 || 8+poolSize > len(data) {
++		return nil, fmt.Errorf("string pool manifest rusak")
++	}
++	pool, err := rewritePool(data[8:8+poolSize], func(s string) string {
++		if s == oldPkg {
++			return newPkg
++		}
++		return s
++	})
++	if err != nil {
++		return nil, err
++	}
++	out := make([]byte, 0, len(data)+len(pool))
++	out = append(out, data[:8]...)
++	out = append(out, pool...)
++	out = append(out, data[8+poolSize:]...)
++	putLE32(out[4:], len(out))
++	return out, nil
++}
++
++// patchARSC -- ganti label (string/app_name) + nama package di resources.arsc.
++func patchARSC(data []byte, newPkg, newLabel string) ([]byte, error) {
++	if len(data) < 40 || le16(data) != 0x0002 {
++		return nil, fmt.Errorf("bukan resources.arsc")
++	}
++	poolSize := le32(data[16:])
++	if poolSize < 28 || 12+poolSize > len(data) {
++		return nil, fmt.Errorf("string pool arsc rusak")
++	}
++	pool, err := rewritePool(data[12:12+poolSize], func(s string) string {
++		if s == templateLabel {
++			return newLabel
++		}
++		return s
++	})
++	if err != nil {
++		return nil, err
++	}
++	rest := append([]byte(nil), data[12+poolSize:]...)
++	if len(rest) >= 268 && le16(rest) == 0x0200 {
++		u := utf16.Encode([]rune(newPkg))
++		if len(u) > 127 {
++			return nil, fmt.Errorf("nama package kepanjangan")
++		}
++		name := rest[12:268]
++		for i := range name {
++			name[i] = 0
++		}
++		for i, v := range u {
++			binary.LittleEndian.PutUint16(name[i*2:], v)
++		}
++	}
++	out := make([]byte, 0, 12+len(pool)+len(rest))
++	out = append(out, data[:12]...)
++	out = append(out, pool...)
++	out = append(out, rest...)
++	putLE32(out[4:], len(out))
++	return out, nil
++}
++
++// patchTemplateIdentity -- terapin package + label baru ke entries template.
++func patchTemplateIdentity(entries []APKEntry, appName string) error {
++	pkg := makePackageName(appName)
++	label := strings.TrimSpace(appName)
++	if label == "" {
++		label = templateLabel
++	}
++	done := 0
++	for i := range entries {
++		switch entries[i].Name {
++		case "AndroidManifest.xml":
++			d, err := patchAXMLPackage(entries[i].Data, templatePackage, pkg)
++			if err != nil {
++				return fmt.Errorf("manifest: %w", err)
++			}
++			entries[i].Data = d
++			done++
++		case "resources.arsc":
++			d, err := patchARSC(entries[i].Data, pkg, label)
++			if err != nil {
++				return fmt.Errorf("resources.arsc: %w", err)
++			}
++			entries[i].Data = d
++			done++
++		}
++	}
++	if done != 2 {
++		return fmt.Errorf("manifest/resources.arsc gak ketemu di template")
++	}
++	return nil
++}
+diff --git a/apkpack.go b/apkpack.go
+index db96fca..0359d63 100644
+--- a/apkpack.go
++++ b/apkpack.go
+@@ -72,14 +72,14 @@ func packAPK(entries []APKEntry) ([]byte, error) {
+ }
+ 
+ // patchConfigJSON — ganti URL di assets/config.json.
+-func patchConfigJSON(entries []APKEntry, url string) {
++func patchConfigJSON(entries []APKEntry, url string) []APKEntry {
+ 	safeURL := strings.ReplaceAll(url, `\`, `\\`)
+ 	safeURL = strings.ReplaceAll(safeURL, `"`, `\"`)
+ 	newContent := []byte(fmt.Sprintf(`{"url":"%s"}`, safeURL))
+ 	for i := range entries {
+ 		if entries[i].Name == "assets/config.json" {
+ 			entries[i].Data = newContent
+-			return
++			return entries
+ 		}
+ 	}
+ 	entries = append(entries, APKEntry{
+@@ -87,6 +87,7 @@ func patchConfigJSON(entries []APKEntry, url string) {
+ 		Data:   newContent,
+ 		Method: zip.Deflate,
+ 	})
++	return entries
+ }
+ 
+ // patchIcons — replace 4 icon mipmap. Key: "hdpi", "xhdpi", "xxhdpi", "xxxhdpi".
+diff --git a/apksign.go b/apksign.go
+index 27d373d..42b6c6f 100644
+--- a/apksign.go
++++ b/apksign.go
+@@ -126,7 +126,9 @@ func buildManifest(entries []APKEntry) []byte {
+ 	sb.WriteString("Created-By: 1.0 (Netra)\r\n")
+ 	sb.WriteString("\r\n")
+ 	for _, e := range entries {
+-		if strings.HasPrefix(e.Name, "META-INF/") {
++		// File signature lama udah dibuang removeSignatureFiles; sisanya
++		// (mis. META-INF/com/android/...) wajib ikut ditandatangani.
++		if strings.HasSuffix(e.Name, "/") {
+ 			continue
+ 		}
+ 		h := sha256.Sum256(e.Data)
+diff --git a/exebuilder.go b/exebuilder.go
+index 6158b87..9756706 100644
+--- a/exebuilder.go
++++ b/exebuilder.go
+@@ -51,6 +51,8 @@ func main() {
+ 		"C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+ 		"C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
+ 		"msedge.exe",
++		"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
++		"C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+ 		"chrome.exe",
+ 	}
+ 
+@@ -77,7 +79,6 @@ RequestExecutionLevel user
+ 
+ !define MUI_ABORTWARNING
+ !insertmacro MUI_PAGE_WELCOME
+-!insertmacro MUI_PAGE_DIRECTORY
+ !insertmacro MUI_PAGE_INSTFILES
+ !insertmacro MUI_PAGE_FINISH
+ !insertmacro MUI_UNPAGE_CONFIRM
+@@ -87,7 +88,7 @@ RequestExecutionLevel user
+ Section "Install"
+     SetOutPath "$INSTDIR"
+     File "__EXENAME__"
+-    File "index.html"
++    File /r /x "installer.nsi" /x "Setup.exe" /x "viewer" /x "__EXENAME__" "*"
+ 
+     WriteRegStr HKCU "Software\__APPNAME__" "InstallDir" "$INSTDIR"
+ 
+@@ -106,10 +107,7 @@ Section "Install"
+ SectionEnd
+ 
+ Section "Uninstall"
+-    Delete "$INSTDIR\__EXENAME__"
+-    Delete "$INSTDIR\index.html"
+-    Delete "$INSTDIR\uninstall.exe"
+-    RMDir "$INSTDIR"
++    RMDir /r "$INSTDIR"
+ 
+     Delete "$DESKTOP\__APPNAME__.lnk"
+     Delete "$SMPROGRAMS\__APPNAME__\__APPNAME__.lnk"
+diff --git a/main.go b/main.go
+index 2c6a8bd..ef54803 100644
+--- a/main.go
++++ b/main.go
+@@ -916,6 +916,10 @@ func (m *Model) handleSlash(cmd string) {
+ 		kind, targetURL, appName := parts[0], parts[1], strings.Join(parts[2:], " ")
+ 		var logStr string
+ 		var err error
++		if (kind == "exe" || kind == "exe-win" || kind == "win") &&
++			!strings.HasPrefix(targetURL, "/") && !strings.HasPrefix(targetURL, "~/") {
++			targetURL = filepath.Join(m.currentDir, targetURL)
++		}
+ 		if kind == "apkfast" {
+ 			logStr, err = cmdBuildAPKFast(targetURL, appName)
+ 		} else if kind == "apk" {
+@@ -944,6 +948,8 @@ func (m *Model) handleSlash(cmd string) {
+ 			logStr, err = cmdBuildInstallerEXE(targetURL, appName)
+ 		} else if kind == "exe-win" || kind == "win" {
+ 			logStr, err = cmdBuildWinInstaller(targetURL, appName)
++		} else {
++			logStr = "Kind gak dikenal: " + kind + "\nPilihan: apk, apkfast, html, native, exe, exe-win"
+ 		}
+ 		if err != nil && logStr == "" {
+ 			logStr = "Error: " + err.Error()
+diff --git a/native_builder.go b/native_builder.go
+index 2acd9bf..5d3c81f 100644
+--- a/native_builder.go
++++ b/native_builder.go
+@@ -408,12 +408,18 @@ func cmdBuildNativeAPK(dataJSONPath, appNameOverride string) (string, error) {
+ 	// 10. Sign
+ 	keystore := filepath.Join(home, ".netra-ai", "netra.keystore")
+ 	signed := filepath.Join(workDir, "app-signed.apk")
++	aligned := filepath.Join(workDir, "app-aligned.apk")
++	out, err = exec.Command("zipalign", "-f", "4", unsigned, aligned).CombinedOutput()
++	if err != nil {
++		log.WriteString(fmt.Sprintf("  `→` zipalign     GAGAL\n\n```\n%s\n```\n", string(out)))
++		return log.String(), err
++	}
+ 	signCmd := exec.Command("apksigner", "sign",
+ 		"--ks", keystore,
+ 		"--ks-pass", "pass:netra123",
+ 		"--key-pass", "pass:netra123",
+ 		"--out", signed,
+-		unsigned,
++		aligned,
+ 	)
+ 	out, err = signCmd.CombinedOutput()
+ 	if err != nil {
+diff --git a/wininstaller_builder.go b/wininstaller_builder.go
+index 323482b..556966d 100644
+--- a/wininstaller_builder.go
++++ b/wininstaller_builder.go
+@@ -91,7 +91,7 @@ import (
+         "unsafe"
+ )
+ 
+-//go:embed payload
++//go:embed all:payload
+ var payloadFS embed.FS
+ 
+ const AppName = "__APPNAME__"

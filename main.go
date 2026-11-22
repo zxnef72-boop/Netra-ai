@@ -136,6 +136,15 @@ type Model struct {
 
 	allProviders []Provider
 	activeIdx    int
+
+	// Animasi loading (lihat ui_anim.go)
+	frame       int
+	ticking     bool
+	streamStart time.Time
+
+	// Checklist progres agent (lihat agent_progress.go)
+	agentSteps []agentStep
+	agentPhase string
 }
 
 func initialModel() (Model, error) {
@@ -272,7 +281,8 @@ func waitForChunk(ch chan StreamChunk) tea.Cmd {
 	return func() tea.Msg { return chunkMsg(<-ch) }
 }
 
-func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+// update0 — logika asli; dibungkus Update() di ui_anim.go buat animasi.
+func (m Model) update0(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
@@ -1819,48 +1829,8 @@ func pickBlockIndex(args []string, blocks []string) int {
 }
 
 func (m Model) View() string {
-	if !m.ready {
-		return ""
-	}
-	w := m.width
-	h := m.height
-	if w < 40 {
-		w = 40
-	}
-	if h < 10 {
-		h = 10
-	}
-
-	if m.showHistory {
-		return m.renderHistory(w, h)
-	}
-
-	// Welcome screen
-	if m.isWelcome() && !m.showFiles {
-		return m.renderWelcomeScreen(w, h)
-	}
-
-	// Chat layout:
-	//   row 0..h-5  → chat panel (dengan file browser kalo aktif)
-	//   h-4..h-2    → input box
-	//   h-1         → footer bar
-	chatH := h - 4
-	if chatH < 4 {
-		chatH = 4
-	}
-
-	if m.showFiles {
-		return m.renderFileBrowser(w, h)
-	}
-
-	chatArea := m.renderChatPane(w, chatH)
-
-	inputBox := m.renderInputBar(w)
-
-	// Footer bar
-	footer := m.renderStatusBar(w)
-
-	return chatArea + "\n" + inputBox + "\n" + footer
+	// Render ada di ui_opencode.go
+	return m.ocView()
 }
 
 // renderInputBar — input box terpisah dgn background gelap + shadow.

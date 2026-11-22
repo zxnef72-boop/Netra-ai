@@ -33,7 +33,12 @@ func (m *Model) handleAgent(args []string) {
 
 	go func() {
 		defer close(ch)
+		agentHook = func(kind, tool, label, detail string) {
+			ch <- StreamChunk{Text: agentEncode(kind, tool, label, detail), Provider: "agent-step"}
+		}
+		agentHook("begin", "", "", "")
 		out, err := cmdAgentRun(prompt, cwd, provider)
+		agentHook = nil
 		if err != nil {
 			ch <- StreamChunk{Text: fmt.Sprintf("[agent error: %v]", err), Provider: "agent"}
 		} else {

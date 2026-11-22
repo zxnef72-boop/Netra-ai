@@ -2,425 +2,866 @@
 <html lang="id">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#16161e">
 <title>Netra IDE</title>
 <style>
-  * { box-sizing: border-box; }
+  :root {
+    --bg: #1a1b26;
+    --bg2: #16161e;
+    --bg3: #1f2335;
+    --hl: #24283b;
+    --line: #292e42;
+    --text: #c0caf5;
+    --mute: #9aa5ce;
+    --dim: #565f89;
+    --blue: #7aa2f7;
+    --purple: #bb9af7;
+    --green: #9ece6a;
+    --red: #f7768e;
+    --orange: #ff9e64;
+    --cyan: #2ac3de;
+    --ui: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: ui-monospace, "Roboto Mono", "Cascadia Code", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body {
-    background: #1a1b26;
-    color: #c0caf5;
     margin: 0;
     padding: 0;
-    font-family: ui-monospace, "Roboto Mono", "Cascadia Code", monospace;
-    font-size: 13px;
-    line-height: 1.5;
     height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--ui);
+    font-size: 14px;
+    line-height: 1.4;
     overflow: hidden;
   }
+  button, input, select, textarea { font-family: inherit; color: inherit; }
+  [data-icon] { display: inline-flex; align-items: center; justify-content: center; }
+  [hidden] { display: none !important; }
+
   #app {
     display: flex;
     flex-direction: column;
     height: 100vh;
+    height: 100dvh;
   }
 
-  /* HEADER */
+  /* ---------- tombol ---------- */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 42px;
+    padding: 0 16px;
+    border-radius: 10px;
+    border: 1px solid var(--line);
+    background: var(--bg3);
+    color: var(--text);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.12s, border-color 0.12s, opacity 0.12s;
+  }
+  .btn:active { background: var(--hl); }
+  .btn.primary { background: var(--blue); border-color: var(--blue); color: #16161e; font-weight: 600; }
+  .btn.primary:active { opacity: 0.85; }
+  .btn.sm { height: 36px; padding: 0 12px; font-size: 13px; }
+  .btn:disabled { opacity: 0.5; cursor: default; }
+  .icon-btn {
+    width: 40px; height: 40px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border: 0; border-radius: 10px;
+    background: transparent;
+    color: var(--mute);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 0.12s;
+  }
+  .icon-btn:active { background: var(--hl); }
+  @media (hover: hover) {
+    .btn:hover { background: var(--hl); }
+    .btn.primary:hover { opacity: 0.9; background: var(--blue); }
+    .icon-btn:hover { background: var(--hl); }
+  }
+
+  input[type="text"], select {
+    height: 42px;
+    padding: 0 12px;
+    border-radius: 10px;
+    border: 1px solid var(--line);
+    background: var(--bg2);
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.12s;
+  }
+  input[type="text"]:focus, select:focus { border-color: var(--blue); }
+  input::placeholder { color: var(--dim); }
+
+  /* ---------- header ---------- */
   #header {
     display: flex;
     align-items: center;
-    background: #16161e;
-    border-bottom: 1px solid #292e42;
-    padding: 10px 12px;
-    font-weight: bold;
-    letter-spacing: 0.5px;
+    gap: 6px;
+    min-height: 56px;
+    padding: 8px 10px 8px 8px;
+    background: var(--bg2);
+    border-bottom: 1px solid var(--line);
     flex-shrink: 0;
   }
-  #menuBtn {
-    background: transparent;
-    color: #7aa2f7;
-    border: 1px solid #292e42;
-    padding: 2px 10px;
-    margin-right: 12px;
-    font-family: inherit;
+  #titleBox { flex: 1; min-width: 0; padding-left: 4px; }
+  #title {
     font-size: 16px;
-    cursor: pointer;
-  }
-  #menuBtn:active { background: #292e42; }
-  #headerTitle { color: #c0caf5; }
-
-  /* VIEW */
-  #view { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
-
-  /* LIST */
-  #listView {
-    padding: 12px;
-    overflow-y: auto;
-    flex: 1;
-  }
-  .section-label {
-    color: #565f89;
-    font-size: 11px;
-    letter-spacing: 1px;
-    padding: 6px 4px;
-    border-bottom: 1px solid #292e42;
-    margin-bottom: 8px;
-  }
-  .file-item {
-    padding: 10px 12px;
-    border-bottom: 1px solid #1f2335;
-    cursor: pointer;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    color: #c0caf5;
-  }
-  .file-item:active { background: #24283b; }
-  .file-item .name { color: #7aa2f7; }
-  .file-item .size { color: #565f89; font-size: 11px; }
-
-  /* EDITOR VIEW */
-  #editorView {
-    display: none;
-    flex-direction: column;
-    flex: 1;
+    font-weight: 600;
+    white-space: nowrap;
     overflow: hidden;
+    text-overflow: ellipsis;
   }
-
-  #currentFile {
-    padding: 6px 12px;
-    background: #16161e;
-    border-bottom: 1px solid #292e42;
-    color: #bb9af7;
+  #subtitle {
     font-size: 12px;
+    color: var(--dim);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  #headActions { display: flex; align-items: center; gap: 6px; }
+
+  #view { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
+  /* ---------- daftar file ---------- */
+  #listView { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  #crumbs {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 8px 10px;
+    overflow-x: auto;
+    white-space: nowrap;
+    flex-shrink: 0;
+    scrollbar-width: none;
+  }
+  #crumbs::-webkit-scrollbar { display: none; }
+  .crumb {
+    border: 0;
+    background: transparent;
+    padding: 6px 8px;
+    border-radius: 8px;
+    color: var(--mute);
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .crumb:active { background: var(--hl); }
+  .crumb.last { color: var(--text); font-weight: 600; }
+  .crumb-sep { color: var(--dim); font-size: 13px; }
+  #toolbar { display: flex; gap: 8px; padding: 0 10px 8px; flex-shrink: 0; }
+  #search { flex: 1; min-width: 0; }
+  #filter { width: 104px; }
+  #listInfo { padding: 2px 14px 6px; font-size: 12px; color: var(--dim); flex-shrink: 0; }
+  #fileItems { flex: 1; overflow-y: auto; padding-bottom: 20px; -webkit-overflow-scrolling: touch; }
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 52px;
+    padding: 0 14px;
+    border-bottom: 1px solid var(--bg3);
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+  .row:active { background: var(--hl); }
+  @media (hover: hover) { .row:hover { background: var(--bg3); } }
+  .row .ico { color: var(--dim); display: inline-flex; }
+  .row.dir .ico { color: var(--blue); }
+  .row .name { flex: 1; min-width: 0; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row.dir .name { color: var(--text); }
+  .row .size { font-size: 12px; color: var(--dim); font-variant-numeric: tabular-nums; }
+  .row .chev { color: var(--dim); display: inline-flex; }
+  .row.up .name { color: var(--mute); }
+  .empty { padding: 40px 24px; text-align: center; color: var(--dim); }
+  .empty .big { color: var(--mute); font-size: 15px; margin-bottom: 6px; }
+  .empty .btn { margin-top: 16px; }
+
+  /* ---------- editor ---------- */
+  #editorView { flex: 1; min-height: 0; display: none; flex-direction: column; }
+  #fileBar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    background: var(--bg2);
+    border-bottom: 1px solid var(--line);
+    font-size: 12px;
+    color: var(--mute);
     flex-shrink: 0;
   }
+  #filePath { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: var(--mono); }
+  #dirtyTag { display: none; align-items: center; gap: 6px; color: var(--orange); }
+  #dirtyTag::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--orange); }
+  #dirtyTag.on { display: inline-flex; }
 
-  .edit-area {
-    display: flex;
-    flex: 1;
-    background: #1a1b26;
-    overflow: hidden;
-    min-height: 0;
-  }
-  .linenums {
-    width: 28px;
-    padding: 8px 4px 8px 0;
+  .edit-area { display: flex; flex: 1; min-height: 0; background: var(--bg); overflow: hidden; }
+  #lineNums {
+    padding: 10px 8px 60px 0;
     text-align: right;
-    background: #16161e;
+    background: var(--bg2);
     color: #3b4261;
     overflow: hidden;
     user-select: none;
+    -webkit-user-select: none;
     white-space: pre;
+    font-family: var(--mono);
     font-size: 13px;
-    line-height: 1.5;
-    border-right: 1px solid #292e42;
+    line-height: 20px;
+    border-right: 1px solid var(--line);
     flex-shrink: 0;
   }
-  .code-wrap {
-    position: relative;
-    flex: 1;
-    overflow: hidden;
-    min-width: 0;
-  }
+  .code-wrap { position: relative; flex: 1; min-width: 0; overflow: hidden; }
   #highlight, #editor {
     position: absolute;
     inset: 0;
-    padding: 8px 10px;
+    width: 100%;
+    height: 100%;
     margin: 0;
+    padding: 10px 12px 60px 12px;
     border: 0;
     outline: none;
-    font-family: inherit;
+    font-family: var(--mono);
     font-size: 13px;
-    line-height: 1.5;
+    line-height: 20px;
+    letter-spacing: 0;
+    font-variant-ligatures: none;
     white-space: pre;
-    overflow: auto;
-    background: transparent;
     tab-size: 4;
     -moz-tab-size: 4;
-    word-wrap: normal;
+    background: transparent;
+    overflow-wrap: normal;
     word-break: normal;
   }
+  #highlight { z-index: 1; overflow: hidden; pointer-events: none; color: var(--text); }
   #editor {
-    color: transparent;
-    caret-color: #7aa2f7;
     z-index: 2;
+    overflow: auto;
     resize: none;
+    color: transparent;
     -webkit-text-fill-color: transparent;
+    caret-color: var(--blue);
+    scrollbar-width: none;
   }
-  #highlight {
-    z-index: 1;
-    pointer-events: none;
-    color: #c0caf5;
-  }
+  #editor::-webkit-scrollbar { display: none; }
+  #editor::selection { background: rgba(122, 162, 247, 0.3); }
 
-  /* TOKEN COLORS (Tokyo Night) */
-  .tk-c { color: #565f89; font-style: italic; }
-  .tk-s { color: #9ece6a; }
-  .tk-k { color: #bb9af7; }
-  .tk-n { color: #ff9e64; }
-  .tk-f { color: #7aa2f7; }
-  .tk-t { color: #2ac3de; }
+  .tk-c { color: var(--dim); font-style: italic; }
+  .tk-s { color: var(--green); }
+  .tk-k { color: var(--purple); }
+  .tk-n { color: var(--orange); }
+  .tk-f { color: var(--blue); }
 
-  /* BOTTOM BAR */
-  #bottombar {
-    display: flex;
-    background: #16161e;
-    border-top: 1px solid #292e42;
+  #outPanel {
+    display: none;
+    flex-direction: column;
+    max-height: 38%;
+    background: var(--bg2);
+    border-top: 1px solid var(--line);
     flex-shrink: 0;
   }
-  #bottombar button {
-    flex: 1;
-    background: transparent;
-    color: #c0caf5;
-    border: 0;
-    border-right: 1px solid #292e42;
-    padding: 12px;
-    font-family: inherit;
-    font-size: 13px;
-    cursor: pointer;
-    letter-spacing: 1px;
+  #outPanel.open { display: flex; }
+  #outHead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 2px 6px 0 12px;
+    font-size: 12px;
+    color: var(--dim);
+    flex-shrink: 0;
   }
-  #bottombar button:last-child { border-right: 0; }
-  #bottombar button:active { background: #292e42; color: #7aa2f7; }
+  #outText {
+    margin: 0;
+    padding: 4px 12px 10px;
+    overflow: auto;
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: var(--text);
+  }
+  #outText .o-cmd { color: var(--blue); }
+  #outText .o-err { color: var(--red); }
+  #outText .o-dim { color: var(--dim); }
+
+  #keys {
+    display: flex;
+    gap: 6px;
+    padding: 6px 8px;
+    overflow-x: auto;
+    background: var(--bg2);
+    border-top: 1px solid var(--line);
+    flex-shrink: 0;
+    scrollbar-width: none;
+  }
+  #keys::-webkit-scrollbar { display: none; }
+  .key {
+    flex-shrink: 0;
+    min-width: 40px;
+    height: 34px;
+    padding: 0 10px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: var(--bg3);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .key:active { background: var(--hl); }
+
+  #bottombar {
+    display: flex;
+    gap: 8px;
+    padding: 8px 10px;
+    background: var(--bg2);
+    border-top: 1px solid var(--line);
+    flex-shrink: 0;
+  }
+  #bottombar .btn { flex: 1; }
+  #bottombar .btn.primary { flex: 1.4; }
   #statusbar {
     display: flex;
     justify-content: space-between;
-    padding: 4px 12px;
-    background: #1f2335;
-    border-top: 1px solid #292e42;
-    color: #565f89;
+    padding: 4px 12px calc(4px + env(safe-area-inset-bottom));
+    background: var(--bg3);
+    color: var(--dim);
     font-size: 11px;
     flex-shrink: 0;
   }
-  #statusbar span { color: #7aa2f7; }
 
-  #out {
-    padding: 8px 12px;
-    background: #16161e;
-    border-top: 1px solid #292e42;
-    white-space: pre-wrap;
-    font-size: 11px;
-    color: #9ece6a;
-    max-height: 20vh;
-    overflow: auto;
-    flex-shrink: 0;
-  }
-
-  /* SIDEBAR */
-  #sidebar {
-    position: fixed;
-    top: 0; left: 0;
-    width: 220px;
-    height: 100%;
-    background: #16161e;
-    border-right: 1px solid #292e42;
-    transform: translateX(-100%);
-    transition: transform 0.15s;
-    z-index: 100;
-    padding: 0;
-  }
-  #sidebar.open { transform: translateX(0); }
-  #sidebar .title {
-    padding: 14px 16px;
-    color: #bb9af7;
-    font-weight: bold;
-    letter-spacing: 1px;
-    border-bottom: 1px solid #292e42;
-  }
-  #sidebar .item {
-    padding: 12px 16px;
-    border-bottom: 1px solid #1f2335;
-    cursor: pointer;
-    color: #c0caf5;
-  }
-  #sidebar .item:active { background: #24283b; }
-  #backdrop {
+  /* ---------- dialog ---------- */
+  #dlgBg {
     position: fixed;
     inset: 0;
-    background: rgba(0,0,0,0.6);
-    z-index: 99;
-    display: none;
-  }
-  #backdrop.open { display: block; }
-
-  /* MODAL */
-  #modalBg {
-    position: fixed; inset: 0;
-    background: rgba(0,0,0,0.7);
     z-index: 200;
     display: none;
     align-items: center;
     justify-content: center;
     padding: 20px;
+    background: rgba(0, 0, 0, 0.6);
   }
-  #modalBg.open { display: flex; }
-  #modal {
-    background: #1a1b26;
-    border: 1px solid #292e42;
-    padding: 16px;
+  #dlgBg.open { display: flex; }
+  #dlg {
     width: 100%;
-    max-width: 400px;
+    max-width: 420px;
+    padding: 18px;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 14px;
   }
-  #modal .mtitle {
-    color: #bb9af7;
-    margin-bottom: 12px;
+  #dlgTitle { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
+  #dlgMsg { font-size: 13px; color: var(--mute); margin-bottom: 12px; word-break: break-word; }
+  #dlgInput { width: 100%; margin-top: 8px; font-family: var(--mono); font-size: 14px; }
+  #dlgChips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .chip {
+    padding: 6px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: var(--bg3);
+    color: var(--mute);
+    font-family: var(--mono);
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .chip:active { background: var(--hl); }
+  #dlgBtns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+  #dlgBtns .btn { min-width: 84px; }
+
+  /* ---------- toast ---------- */
+  #toast {
+    position: fixed;
+    left: 50%;
+    bottom: calc(96px + env(safe-area-inset-bottom));
+    transform: translate(-50%, 8px);
+    max-width: 90%;
+    padding: 10px 14px;
+    border-radius: 10px;
+    border: 1px solid var(--line);
+    background: var(--hl);
+    color: var(--text);
     font-size: 13px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s, transform 0.15s;
+    z-index: 300;
   }
-  #modal input {
-    width: 100%;
-    margin-bottom: 12px;
-  }
-  #modal .mbtns {
-    display: flex;
-    gap: 8px;
-  }
-  #modal .mbtns button {
-    flex: 1;
-    padding: 10px;
-  }
+  #toast.show { opacity: 1; transform: translate(-50%, 0); }
+  #toast.err { border-color: var(--red); color: var(--red); }
 </style>
 </head>
 <body>
 
-<div id="sidebar">
-  <div class="title">NETRA IDE</div>
-  <div class="item" onclick="goList()">DAFTAR FILE</div>
-  <div class="item" onclick="closeSidebar()">TUTUP</div>
-</div>
-<div id="backdrop" onclick="closeSidebar()"></div>
-
 <div id="app">
 
   <div id="header">
-    <button id="menuBtn" onclick="openSidebar()">=</button>
-    <span id="headerTitle" style="flex:1;">DAFTAR FILE</span>
-    <button onclick="newFolder()" title="Bikin folder baru" style="background:transparent;color:#7aa2f7;border:1px solid #292e42;padding:2px 10px;margin-left:6px;font-family:inherit;cursor:pointer;">+DIR</button>
-    <button onclick="newFile()" title="Bikin file baru" style="background:transparent;color:#7aa2f7;border:1px solid #292e42;padding:2px 10px;margin-left:6px;font-family:inherit;cursor:pointer;">+FILE</button>
+    <button class="icon-btn" id="backBtn" data-icon="back" aria-label="Kembali" hidden></button>
+    <div id="titleBox">
+      <div id="title">Netra IDE</div>
+      <div id="subtitle"></div>
+    </div>
+    <div id="headActions">
+      <button class="icon-btn" id="refreshBtn" data-icon="refresh" aria-label="Muat ulang daftar"></button>
+      <button class="btn sm" id="newFolderBtn"><span data-icon="plus"></span>Folder</button>
+      <button class="btn sm" id="newFileBtn"><span data-icon="plus"></span>File</button>
+    </div>
   </div>
 
   <div id="view">
 
     <div id="listView">
-      <div class="row" style="margin-bottom:10px;">
-        <select id="filter" onchange="renderList()">
-          <option value="">SEMUA</option>
-          <option value=".go">GO</option>
-          <option value=".lua">LUA</option>
-          <option value=".py">PYTHON</option>
+      <div id="crumbs"></div>
+      <div id="toolbar">
+        <input type="text" id="search" placeholder="Cari nama file" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="off">
+        <select id="filter" aria-label="Filter tipe file">
+          <option value="">Semua</option>
+          <option value=".go">Go</option>
+          <option value=".lua">Lua</option>
+          <option value=".py">Python</option>
           <option value=".html">HTML</option>
           <option value=".css">CSS</option>
           <option value=".js">JS</option>
-          <option value=".java">JAVA</option>
-          <option value=".sh">SHELL</option>
+          <option value=".java">Java</option>
+          <option value=".sh">Shell</option>
           <option value=".c">C</option>
-          <option value=".rs">RUST</option>
-          <option value=".md">MARKDOWN</option>
+          <option value=".rs">Rust</option>
+          <option value=".md">Markdown</option>
           <option value=".json">JSON</option>
         </select>
       </div>
-      <div class="section-label" id="listLabel">FILE (0)</div>
+      <div id="listInfo"></div>
       <div id="fileItems"></div>
     </div>
 
     <div id="editorView">
-      <div id="currentFile">-</div>
+      <div id="fileBar">
+        <span id="filePath">-</span>
+        <span id="dirtyTag">belum disimpan</span>
+      </div>
       <div class="edit-area">
-        <div class="linenums" id="lineNums">1</div>
+        <div id="lineNums">1</div>
         <div class="code-wrap">
           <pre id="highlight" aria-hidden="true"></pre>
-          <textarea id="editor" spellcheck="false" autocapitalize="off" autocorrect="off"></textarea>
+          <textarea id="editor" wrap="off" spellcheck="false" autocapitalize="off" autocorrect="off" autocomplete="off"></textarea>
         </div>
       </div>
+      <div id="outPanel">
+        <div id="outHead">
+          <span>Output</span>
+          <button class="icon-btn" id="outClose" data-icon="close" aria-label="Tutup output"></button>
+        </div>
+        <pre id="outText"></pre>
+      </div>
+      <div id="keys"></div>
       <div id="bottombar">
-        <button onclick="saveFile()">SAVE</button>
-        <button onclick="runCmd()">RUN</button>
-        <button onclick="goList()">KEMBALI</button>
+        <button class="btn primary" id="saveBtn">Simpan</button>
+        <button class="btn" id="runBtn">Jalankan</button>
+        <button class="btn" id="closeBtn">Kembali</button>
       </div>
       <div id="statusbar">
         <span id="stPos">Ln 1, Col 1</span>
         <span id="stInfo">UTF-8</span>
       </div>
-      <div id="out">Siap.</div>
     </div>
 
   </div>
 </div>
 
-<div id="modalBg">
-  <div id="modal">
-    <div class="mtitle" id="modalTitle">INPUT</div>
-    <input id="modalInput" type="text" autocapitalize="off" autocorrect="off" spellcheck="false">
-    <div class="mbtns">
-      <button onclick="modalCancel()">BATAL</button>
-      <button onclick="modalOk()">OK</button>
-    </div>
+<div id="dlgBg">
+  <div id="dlg" role="dialog" aria-modal="true" aria-labelledby="dlgTitle">
+    <div id="dlgTitle"></div>
+    <div id="dlgMsg"></div>
+    <input type="text" id="dlgInput" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="off">
+    <div id="dlgChips"></div>
+    <div id="dlgBtns"></div>
   </div>
 </div>
+
+<div id="toast" role="status"></div>
 
 <script>
-var TOKEN = "rahasia-netra-2026";
-var API = (location.protocol === "file:") ? "http://127.0.0.1:8080" : location.origin;
-var H = { "X-Netra-Token": TOKEN, "Content-Type": "application/json" };
+(function () {
+"use strict";
+
+var TOKEN = "__NETRA_TOKEN__";
+var API = location.origin;
+var HDR = { "X-Netra-Token": TOKEN, "Content-Type": "application/json" };
+
+var cwd = "";            // folder yang lagi dibuka (relatif dari folder kerja)
+var rootName = "project";
+var entries = [];
 var currentFile = "";
-var savedScroll = {};  // simpan scroll per file
+var savedContent = "";
+var view = "list";
+var offline = false;
+var pollTimer = null;
+var running = false;
+var scrollMemo = {};
+var toastTimer = null;
+var hlQueued = false;
 
 function $(id) { return document.getElementById(id); }
-function log(s) { $('out').textContent = s; }
+function el(tag, cls, text) {
+  var e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+function join(dir, name) { return dir ? dir + "/" + name : name; }
+function dirname(p) { var i = p.lastIndexOf("/"); return i === -1 ? "" : p.slice(0, i); }
+function basename(p) { var i = p.lastIndexOf("/"); return i === -1 ? p : p.slice(i + 1); }
+function extOf(p) { var b = basename(p); var i = b.lastIndexOf("."); return i <= 0 ? (b.charAt(0) === "." ? b.toLowerCase() : "") : b.slice(i).toLowerCase(); }
 
-// Keywords Go + Lua
-var KEYWORDS = new Set(("package import func return if else for while var const type struct map chan go defer range switch case default break continue nil true false " +
-  "local then do end function and or not repeat until elseif").split(" "));
+/* ---------- ikon ---------- */
+var ICONS = {
+  folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  file: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>',
+  back: '<path d="M15 5l-7 7 7 7"/>',
+  chevron: '<path d="M9 5l7 7-7 7"/>',
+  refresh: '<path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/>',
+  up: '<path d="M12 19V5"/><path d="M6 11l6-6 6 6"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  close: '<path d="M6 6l12 12M18 6L6 18"/>'
+};
+function svg(name, size) {
+  return '<svg viewBox="0 0 24 24" width="' + size + '" height="' + size + '" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + ICONS[name] + '</svg>';
+}
+function iconEl(name, size) {
+  var s = el("span", "ico");
+  s.innerHTML = svg(name, size || 20);
+  return s;
+}
+Array.prototype.forEach.call(document.querySelectorAll("[data-icon]"), function (n) {
+  n.innerHTML = svg(n.getAttribute("data-icon"), n.classList.contains("icon-btn") ? 22 : 16);
+});
 
-function esc(s) {
-  return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+/* ---------- toast & error ---------- */
+function toast(msg, isErr, sticky) {
+  var t = $("toast");
+  t.textContent = msg;
+  t.className = "show" + (isErr ? " err" : "");
+  clearTimeout(toastTimer);
+  if (!sticky) toastTimer = setTimeout(function () { t.className = ""; }, isErr ? 3500 : 1800);
+}
+function handleErr(e, inList) {
+  if (e && e.offline) {
+    if (inList) { setOffline(true); } else { toast("Server gak bisa dihubungi", true); }
+    return;
+  }
+  if (e && e.auth) { toast(e.message, true, true); return; }
+  toast((e && e.message) || "Terjadi error", true);
 }
 
-function highlight(code) {
-  var out = "";
-  var i = 0, n = code.length;
+/* ---------- API ---------- */
+async function api(path, opts) {
+  var res;
+  try {
+    res = await fetch(API + path, opts);
+  } catch (e) {
+    var oe = new Error("Server gak bisa dihubungi");
+    oe.offline = true;
+    throw oe;
+  }
+  var j = null;
+  try { j = await res.json(); } catch (e) {}
+  if (res.status === 401) {
+    var ae = new Error((j && j.error) || "Sesi habis, muat ulang halaman");
+    ae.auth = true;
+    throw ae;
+  }
+  if (!res.ok) throw new Error((j && j.error) || ("Error " + res.status));
+  return j || {};
+}
+function get(p) { return api(p, { headers: HDR }); }
+function post(p, body) { return api(p, { method: "POST", headers: HDR, body: JSON.stringify(body) }); }
+
+/* ---------- dialog ---------- */
+function dialog(opt) {
+  return new Promise(function (resolve) {
+    var bg = $("dlgBg"), inp = $("dlgInput"), btns = $("dlgBtns"), chips = $("dlgChips"), msg = $("dlgMsg");
+    $("dlgTitle").textContent = opt.title || "";
+    msg.textContent = opt.message || "";
+    msg.style.display = opt.message ? "block" : "none";
+    inp.style.display = opt.input ? "block" : "none";
+    inp.value = opt.value || "";
+    inp.placeholder = opt.placeholder || "";
+    chips.textContent = "";
+    (opt.chips || []).forEach(function (c) {
+      var b = el("button", "chip", c);
+      b.type = "button";
+      b.onclick = function () { inp.value = c; inp.focus(); };
+      chips.appendChild(b);
+    });
+    btns.textContent = "";
+    var cancelValue = opt.buttons[0].value;
+    var primaryValue = cancelValue;
+    function done(value) {
+      bg.classList.remove("open");
+      bg.onclick = null;
+      bg.onkeydown = null;
+      resolve({ button: value, text: inp.value });
+    }
+    opt.buttons.forEach(function (b) {
+      var btn = el("button", "btn" + (b.primary ? " primary" : ""), b.label);
+      btn.type = "button";
+      btn.onclick = function () { done(b.value); };
+      btns.appendChild(btn);
+      if (b.primary) primaryValue = b.value;
+    });
+    bg.onclick = function (e) { if (e.target === bg) done(cancelValue); };
+    bg.onkeydown = function (e) {
+      if (e.key === "Escape") { e.preventDefault(); done(cancelValue); }
+      else if (e.key === "Enter" && opt.input) { e.preventDefault(); done(primaryValue); }
+    };
+    bg.classList.add("open");
+    if (opt.input) setTimeout(function () { inp.focus(); inp.select(); }, 60);
+  });
+}
+
+/* ---------- view ---------- */
+function showView(v) {
+  view = v;
+  $("listView").style.display = v === "list" ? "flex" : "none";
+  $("editorView").style.display = v === "editor" ? "flex" : "none";
+  $("backBtn").hidden = v !== "editor";
+  $("headActions").style.display = v === "list" ? "flex" : "none";
+  if (v === "list") {
+    $("title").textContent = "Netra IDE";
+    $("subtitle").textContent = "/" + (cwd ? rootName + "/" + cwd : rootName);
+  } else {
+    $("title").textContent = basename(currentFile);
+    var d = dirname(currentFile);
+    $("subtitle").textContent = "/" + (d ? rootName + "/" + d : rootName);
+  }
+}
+
+/* ---------- daftar file ---------- */
+function setOffline(v) {
+  offline = v;
+  if (v && !pollTimer) {
+    pollTimer = setInterval(function () { loadDir(cwd, true); }, 3000);
+  } else if (!v && pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+  if (v) renderList();
+}
+
+async function loadDir(dir, quiet) {
+  try {
+    var j = await get("/api/files?d=" + encodeURIComponent(dir));
+    cwd = dir;
+    entries = j.entries || [];
+    if (j.root) rootName = j.root;
+    setOffline(false);
+    renderCrumbs();
+    renderList();
+    if (view === "list") showView("list");
+  } catch (e) {
+    if (e.offline) { setOffline(true); return; }
+    if (dir !== "") { loadDir("", quiet); }
+    if (!quiet || !e.offline) handleErr(e, true);
+  }
+}
+
+function renderCrumbs() {
+  var box = $("crumbs");
+  box.textContent = "";
+  var parts = cwd ? cwd.split("/") : [];
+  function crumb(label, path, last) {
+    var b = el("button", "crumb" + (last ? " last" : ""), label);
+    b.type = "button";
+    b.onclick = function () { loadDir(path); };
+    return b;
+  }
+  box.appendChild(crumb(rootName, "", parts.length === 0));
+  var acc = "";
+  parts.forEach(function (p, i) {
+    acc = join(acc, p);
+    box.appendChild(el("span", "crumb-sep", "/"));
+    box.appendChild(crumb(p, acc, i === parts.length - 1));
+  });
+  box.scrollLeft = box.scrollWidth;
+}
+
+function formatSize(n) {
+  if (n < 1024) return n + " B";
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
+  return (n / 1024 / 1024).toFixed(2) + " MB";
+}
+
+function renderList() {
+  var box = $("fileItems");
+  box.textContent = "";
+  if (offline) {
+    var off = el("div", "empty");
+    off.appendChild(el("div", "big", "Server gak bisa dihubungi"));
+    off.appendChild(el("div", "", "Jalankan netra-server di Termux. Halaman ini bakal nyambung lagi sendiri."));
+    var rb = el("button", "btn", "Coba lagi");
+    rb.type = "button";
+    rb.onclick = function () { loadDir(cwd); };
+    off.appendChild(rb);
+    box.appendChild(off);
+    $("listInfo").textContent = "";
+    return;
+  }
+
+  var q = $("search").value.trim().toLowerCase();
+  var flt = $("filter").value;
+  var dirs = [], files = [];
+  entries.forEach(function (e) {
+    if (q && e.name.toLowerCase().indexOf(q) === -1) return;
+    if (e.dir) { dirs.push(e); return; }
+    if (flt && e.ext !== flt) return;
+    files.push(e);
+  });
+
+  var frag = document.createDocumentFragment();
+
+  if (cwd !== "" && !q) {
+    var up = el("div", "row up");
+    up.appendChild(iconEl("up"));
+    up.appendChild(el("span", "name", "Naik satu folder"));
+    up.onclick = function () { loadDir(dirname(cwd)); };
+    frag.appendChild(up);
+  }
+  dirs.forEach(function (d) {
+    var r = el("div", "row dir");
+    r.appendChild(iconEl("folder"));
+    r.appendChild(el("span", "name", d.name));
+    var ch = el("span", "chev");
+    ch.innerHTML = svg("chevron", 18);
+    r.appendChild(ch);
+    r.onclick = function () { loadDir(join(cwd, d.name)); };
+    frag.appendChild(r);
+  });
+  files.forEach(function (f) {
+    var r = el("div", "row");
+    r.appendChild(iconEl("file"));
+    r.appendChild(el("span", "name", f.name));
+    r.appendChild(el("span", "size", formatSize(f.size)));
+    r.onclick = function () { openFile(join(cwd, f.name)); };
+    frag.appendChild(r);
+  });
+
+  if (!dirs.length && !files.length) {
+    var em = el("div", "empty");
+    em.appendChild(el("div", "big", q || flt ? "Gak ada yang cocok" : "Folder ini kosong"));
+    if (!q && !flt) em.appendChild(el("div", "", "Bikin file baru lewat tombol File di atas."));
+    frag.appendChild(em);
+  }
+  box.appendChild(frag);
+  $("listInfo").textContent = files.length + " file, " + dirs.length + " folder";
+}
+
+/* ---------- bikin file / folder ---------- */
+async function newFolder() {
+  var r = await dialog({
+    title: "Folder baru",
+    message: "Dibuat di /" + (cwd ? rootName + "/" + cwd : rootName),
+    input: true, placeholder: "nama-folder",
+    buttons: [{ label: "Batal", value: "cancel" }, { label: "Buat", value: "ok", primary: true }]
+  });
+  var name = r.text.trim();
+  if (r.button !== "ok" || !name) return;
+  try {
+    await post("/api/mkdir", { name: join(cwd, name) });
+    toast("Folder dibuat");
+    loadDir(cwd);
+  } catch (e) { handleErr(e); }
+}
+
+async function newFile() {
+  var r = await dialog({
+    title: "File baru",
+    message: "Dibuat di /" + (cwd ? rootName + "/" + cwd : rootName),
+    input: true, placeholder: "baru.go",
+    buttons: [{ label: "Batal", value: "cancel" }, { label: "Buat", value: "ok", primary: true }]
+  });
+  var name = r.text.trim();
+  if (r.button !== "ok" || !name) return;
+  var path = join(cwd, name);
+  try {
+    await post("/api/newfile", { name: path, content: "" });
+    await loadDir(cwd);
+    openFile(path);
+  } catch (e) { handleErr(e); }
+}
+
+/* ---------- editor ---------- */
+var COMMENT = { "//": ["go", "js", "ts", "jsx", "tsx", "c", "cpp", "h", "hpp", "java", "rs", "php", "css"], "--": ["lua", "sql"], "#": ["py", "sh", "bash", "rb", "yml", "yaml", "toml", "ini", "conf", "gitignore"] };
+var KW_SETS = {
+  go: "package import func return if else for var const type struct map chan go defer range switch case default break continue nil true false interface select fallthrough goto",
+  lua: "local then do end function and or not repeat until elseif if else for while in return break nil true false",
+  py: "def class import from as return if elif else for while in not and or is None True False try except finally with lambda pass break continue yield raise global",
+  sh: "if then else elif fi for while do done case esac function in return exit",
+  c: "function const let var return if else for while switch case default break continue class new this import export from async await true false null undefined int char void struct static public private fn mut use pub impl enum"
+};
+var LANG_OF = { go: "go", lua: "lua", py: "py", sh: "sh", bash: "sh", js: "c", ts: "c", jsx: "c", tsx: "c", c: "c", cpp: "c", h: "c", hpp: "c", java: "c", rs: "c", php: "c", rb: "py" };
+var kwCache = {};
+function langInfo(ext) {
+  var e = ext.replace(".", "");
+  var lc = null;
+  Object.keys(COMMENT).forEach(function (k) { if (COMMENT[k].indexOf(e) !== -1) lc = k; });
+  var fam = LANG_OF[e];
+  if (fam && !kwCache[fam]) kwCache[fam] = new Set(KW_SETS[fam].split(" "));
+  return { lc: lc, block: lc === "//", kw: fam ? kwCache[fam] : null, py: fam === "py" && e === "py" };
+}
+
+function esc(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+
+function highlight(code, ext) {
+  var L = langInfo(ext);
+  var out = "", i = 0, n = code.length;
   while (i < n) {
-    var c = code[i];
-    // comment //
-    if (c === "/" && code[i+1] === "/") {
-      var j = code.indexOf("\n", i); if (j === -1) j = n;
-      out += '<span class="tk-c">' + esc(code.slice(i, j)) + '</span>';
+    var c = code[i], j;
+    if (L.lc && code.substr(i, L.lc.length) === L.lc) {
+      j = code.indexOf("\n", i); if (j === -1) j = n;
+      out += '<span class="tk-c">' + esc(code.slice(i, j)) + "</span>";
       i = j; continue;
     }
-    // comment --
-    if (c === "-" && code[i+1] === "-") {
-      var j = code.indexOf("\n", i); if (j === -1) j = n;
-      out += '<span class="tk-c">' + esc(code.slice(i, j)) + '</span>';
+    if (L.block && c === "/" && code[i + 1] === "*") {
+      j = code.indexOf("*/", i + 2); j = j === -1 ? n : j + 2;
+      out += '<span class="tk-c">' + esc(code.slice(i, j)) + "</span>";
       i = j; continue;
     }
-    // string
     if (c === '"' || c === "'" || c === "`") {
-      var j = i + 1;
-      while (j < n && code[j] !== c) {
-        if (code[j] === "\\") j++;
-        j++;
+      if (L.py && (code.substr(i, 3) === '"""' || code.substr(i, 3) === "'''")) {
+        var q3 = code.substr(i, 3);
+        j = code.indexOf(q3, i + 3); j = j === -1 ? n : j + 3;
+      } else {
+        j = i + 1;
+        while (j < n && code[j] !== c) {
+          if (code[j] === "\n" && c !== "`") break;
+          if (code[j] === "\\") j++;
+          j++;
+        }
+        if (j < n && code[j] === c) j++;
+        if (j > n) j = n;
       }
-      if (j < n) j++;
-      out += '<span class="tk-s">' + esc(code.slice(i, j)) + '</span>';
+      out += '<span class="tk-s">' + esc(code.slice(i, j)) + "</span>";
       i = j; continue;
     }
-    // number
-    if (c >= "0" && c <= "9" && (i === 0 || !/[a-zA-Z0-9_]/.test(code[i-1]))) {
-      var j = i;
-      while (j < n && /[0-9.]/.test(code[j])) j++;
-      out += '<span class="tk-n">' + esc(code.slice(i, j)) + '</span>';
+    if (c >= "0" && c <= "9" && (i === 0 || !/[a-zA-Z0-9_]/.test(code[i - 1]))) {
+      j = i;
+      while (j < n && /[0-9a-fA-FxX._]/.test(code[j])) j++;
+      out += '<span class="tk-n">' + esc(code.slice(i, j)) + "</span>";
       i = j; continue;
     }
-    // identifier
     if (/[a-zA-Z_]/.test(c)) {
-      var j = i;
+      j = i;
       while (j < n && /[a-zA-Z0-9_]/.test(code[j])) j++;
       var w = code.slice(i, j);
-      if (KEYWORDS.has(w)) {
-        out += '<span class="tk-k">' + w + '</span>';
-      } else if (j < n && code[j] === "(") {
-        out += '<span class="tk-f">' + w + '</span>';
-      } else {
-        out += esc(w);
-      }
+      if (L.kw && L.kw.has(w)) out += '<span class="tk-k">' + w + "</span>";
+      else if (L.kw && code[j] === "(") out += '<span class="tk-f">' + w + "</span>";
+      else out += w;
       i = j; continue;
     }
     out += esc(c);
@@ -430,232 +871,279 @@ function highlight(code) {
 }
 
 function updateLineNums() {
-  var lines = $('editor').value.split("\n").length;
+  var lines = $("editor").value.split("\n").length;
   var s = "";
   for (var i = 1; i <= lines; i++) s += i + "\n";
-  $('lineNums').textContent = s;
+  var ln = $("lineNums");
+  ln.textContent = s;
+  ln.style.width = (String(lines).length + 3) + "ch";
 }
 
-function updateHighlight() {
-  var v = $('editor').value;
-  if (v.endsWith("\n")) v += " ";
-  $('highlight').textContent = "";
-  $('highlight').innerHTML = highlight(v);
-  updateLineNums();
+function renderHighlight() {
+  hlQueued = false;
+  var v = $("editor").value;
+  if (v.slice(-1) === "\n") v += " ";
+  $("highlight").innerHTML = highlight(v, extOf(currentFile));
+  syncScroll();
 }
-
+function scheduleHighlight() {
+  if (hlQueued) return;
+  hlQueued = true;
+  requestAnimationFrame(renderHighlight);
+}
 function syncScroll() {
-  $('highlight').scrollTop = $('editor').scrollTop;
-  $('highlight').scrollLeft = $('editor').scrollLeft;
-  $('lineNums').scrollTop = $('editor').scrollTop;
+  var ed = $("editor");
+  $("highlight").scrollTop = ed.scrollTop;
+  $("highlight").scrollLeft = ed.scrollLeft;
+  $("lineNums").scrollTop = ed.scrollTop;
 }
+
+function isDirty() { return currentFile !== "" && $("editor").value !== savedContent; }
+function updateDirty() { $("dirtyTag").classList.toggle("on", isDirty()); }
 
 function updateStatus() {
-  var v = $('editor').value.substring(0, $('editor').selectionStart);
-  var lines = v.split("\n");
-  var ln = lines.length;
-  var col = lines[lines.length - 1].length + 1;
-  $('stPos').textContent = "Ln " + ln + ", Col " + col;
-  $('stInfo').textContent = "UTF-8  |  " + (currentFile || "-");
+  var ed = $("editor");
+  var before = ed.value.substring(0, ed.selectionStart).split("\n");
+  $("stPos").textContent = "Ln " + before.length + ", Col " + (before[before.length - 1].length + 1);
+  var e = extOf(currentFile).replace(".", "").toUpperCase();
+  $("stInfo").textContent = "UTF-8" + (e ? "  |  " + e : "");
 }
 
-function openSidebar() {
-  $('sidebar').classList.add('open');
-  $('backdrop').classList.add('open');
-}
-function closeSidebar() {
-  $('sidebar').classList.remove('open');
-  $('backdrop').classList.remove('open');
+function onEdit() {
+  updateLineNums();
+  scheduleHighlight();
+  updateDirty();
+  updateStatus();
 }
 
-function showView(v) {
-  $('listView').style.display = (v === 'list') ? 'block' : 'none';
-  $('editorView').style.display = (v === 'editor') ? 'flex' : 'none';
-  $('headerTitle').textContent = (v === 'list') ? 'DAFTAR FILE' : 'EDITOR';
+function indentUnit() {
+  var b = basename(currentFile).toLowerCase();
+  return (extOf(currentFile) === ".go" || b === "makefile") ? "\t" : "    ";
 }
 
-function goList() {
-  showView('list');
-  closeSidebar();
-}
-
-function showOffline() {
-  var box = $('fileItems');
-  box.innerHTML = '<div style="padding:20px;text-align:center;color:#f7768e;">' +
-    'SERVER OFFLINE<br><br>' +
-    '<span style="font-size:11px;color:#565f89;">Jalankan di Termux:<br>' +
-    '~/netra-ai/netra-server/netra-server</span><br><br>' +
-    '<button onclick="listFiles()" style="background:transparent;border:1px solid #7aa2f7;color:#7aa2f7;padding:8px 16px;font-family:inherit;cursor:pointer;">RETRY</button>' +
-    '</div>';
-  $('listLabel').textContent = "FILE .GO (offline)";
-}
-
-var allFiles = [];
-
-function formatSize(n) {
-  if (n < 1024) return n + " B";
-  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
-  return (n / 1024 / 1024).toFixed(2) + " MB";
-}
-
-var modalResolve = null;
-function askInput(title, placeholder) {
-  return new Promise(function(resolve) {
-    modalResolve = resolve;
-    $('modalTitle').textContent = title;
-    $('modalInput').value = '';
-    $('modalInput').placeholder = placeholder || '';
-    $('modalBg').classList.add('open');
-    setTimeout(function() { $('modalInput').focus(); }, 100);
-  });
-}
-function modalOk() {
-  var v = $('modalInput').value;
-  $('modalBg').classList.remove('open');
-  if (modalResolve) { modalResolve(v); modalResolve = null; }
-}
-function modalCancel() {
-  $('modalBg').classList.remove('open');
-  if (modalResolve) { modalResolve(null); modalResolve = null; }
-}
-$('modalInput').addEventListener('keydown', function(e) {
-  if (e.key === 'Enter') { e.preventDefault(); modalOk(); }
-});
-
-async function newFolder() {
-  var name = await askInput("Nama folder", "folder-baru");
-  if (!name) return;
-  name = name.trim();
-  if (!name) return;
-  try {
-    var r = await fetch(API + "/api/mkdir", {
-      method: "POST", headers: H,
-      body: JSON.stringify({ name: name })
-    });
-    var j = await r.json();
-    if (j.error) { log("Error: " + j.error); return; }
-    log("Folder dibuat: " + j.path);
-    listFiles();
-  } catch (e) { log("Error: " + e); }
-}
-
-async function newFile() {
-  var name = await askInput("Nama file", "baru.go");
-  if (!name) return;
-  name = name.trim();
-  if (!name) return;
-  try {
-    var r = await fetch(API + "/api/newfile", {
-      method: "POST", headers: H,
-      body: JSON.stringify({ name: name, content: "" })
-    });
-    var j = await r.json();
-    if (j.error) { log("Error: " + j.error); return; }
-    log("File dibuat: " + j.path);
-    listFiles();
-    setTimeout(function() { openFile(name); }, 300);
-  } catch (e) { log("Error: " + e); }
-}
-
-async function listFiles() {
-  try {
-    var r = await fetch(API + "/api/files", { headers: H });
-    if (!r.ok) { showOffline(); return; }
-    var j = await r.json();
-    allFiles = j.files || [];
-    renderList();
-    log("Loaded " + allFiles.length + " file.");
-  } catch (e) {
-    showOffline();
-    log("Server offline. Retry kapan aja.");
+function insertText(text) {
+  var ed = $("editor");
+  ed.focus();
+  var ok = false;
+  try { ok = document.execCommand("insertText", false, text); } catch (e) {}
+  if (!ok) {
+    var s = ed.selectionStart, en = ed.selectionEnd;
+    ed.setRangeText(text, s, en, "end");
+    onEdit();
   }
 }
 
-function renderList() {
-  var flt = $('filter').value;
-  var files = allFiles.filter(function(f) { return flt === "" || f.ext === flt; });
-  var box = $('fileItems');
-  box.innerHTML = '';
-  if (files.length === 0) {
-    box.innerHTML = '<div style="padding:20px;text-align:center;color:#565f89;">Gak ada file</div>';
-    $('listLabel').textContent = "FILE (0)";
-    return;
-  }
-  files.forEach(function(f) {
-    var d = document.createElement('div');
-    d.className = 'file-item';
-    d.innerHTML = '<span class="name">' + esc(f.name) + '</span><span class="size">' + formatSize(f.size) + '</span>';
-    d.onclick = function() { openFile(f.name); };
-    box.appendChild(d);
-  });
-  $('listLabel').textContent = "FILE (" + files.length + ")";
-}
-
-async function openFile(name) {
-  // Simpan posisi scroll file sebelumnya
-  if (currentFile) savedScroll[currentFile] = $('editor').scrollTop;
-  var r = await fetch(API + "/api/read?p=" + encodeURIComponent(name), { headers: H });
-  var j = await r.json();
-  if (j.error) { log("Error: " + j.error); return; }
-  currentFile = name;
-  $('currentFile').textContent = "FILE: " + name;
-  $('editor').value = j.content || '';
-  updateHighlight();
-  log("Opened: " + name);
-  showView('editor');
-  setTimeout(function() {
-    if (savedScroll[name] !== undefined) {
-      $('editor').scrollTop = savedScroll[name];
-      syncScroll();
-    }
-  }, 0);
+async function openFile(path) {
+  try {
+    var j = await get("/api/read?p=" + encodeURIComponent(path));
+    if (currentFile) scrollMemo[currentFile] = $("editor").scrollTop;
+    currentFile = path;
+    var ed = $("editor");
+    ed.value = j.content || "";
+    savedContent = ed.value;
+    $("filePath").textContent = path;
+    $("outPanel").classList.remove("open");
+    showView("editor");
+    history.pushState({ v: "editor" }, "");
+    onEdit();
+    ed.scrollTop = scrollMemo[path] || 0;
+    ed.scrollLeft = 0;
+    ed.setSelectionRange(0, 0);
+    syncScroll();
+    updateStatus();
+  } catch (e) { handleErr(e); }
 }
 
 async function saveFile() {
-  if (!currentFile) return;
-  var content = $('editor').value;
-  var r = await fetch(API + "/api/write", {
-    method: "POST",
-    headers: H,
-    body: JSON.stringify({ name: currentFile, content: content })
+  if (!currentFile) return false;
+  var content = $("editor").value;
+  try {
+    await post("/api/write", { name: currentFile, content: content });
+    savedContent = content;
+    updateDirty();
+    toast("Tersimpan");
+    return true;
+  } catch (e) { handleErr(e); return false; }
+}
+
+// true kalau boleh keluar dari editor
+async function confirmLeave() {
+  if (!isDirty()) return true;
+  var r = await dialog({
+    title: "Ada perubahan belum disimpan",
+    message: currentFile,
+    buttons: [
+      { label: "Batal", value: "cancel" },
+      { label: "Buang", value: "discard" },
+      { label: "Simpan", value: "save", primary: true }
+    ]
   });
-  var j = await r.json();
-  // Jangan reload - posisi tetap
-  log(j.error ? ("Error: " + j.error) : "Saved: " + currentFile);
+  if (r.button === "save") return await saveFile();
+  return r.button === "discard";
+}
+
+async function leaveEditor() {
+  if (view !== "editor") return;
+  if (!(await confirmLeave())) {
+    history.pushState({ v: "editor" }, "");   // balikin entry yang tadi kebuang
+    return;
+  }
+  scrollMemo[currentFile] = $("editor").scrollTop;
+  currentFile = "";
+  savedContent = "";
+  $("editor").value = "";
+  showView("list");
+  loadDir(cwd, true);
+}
+
+/* ---------- jalanin command ---------- */
+function loadHistory() {
+  try { return JSON.parse(localStorage.getItem("netra.cmdhist") || "[]"); } catch (e) { return []; }
+}
+function saveHistory(cmd) {
+  try {
+    var h = loadHistory().filter(function (x) { return x !== cmd; });
+    h.unshift(cmd);
+    localStorage.setItem("netra.cmdhist", JSON.stringify(h.slice(0, 6)));
+  } catch (e) {}
+}
+
+function showOut(parts) {
+  var pre = $("outText");
+  pre.textContent = "";
+  parts.forEach(function (p) { pre.appendChild(el("span", p.cls || "", p.text)); });
+  $("outPanel").classList.add("open");
+  pre.scrollTop = pre.scrollHeight;
 }
 
 async function runCmd() {
-  var cmd = prompt("Command (go, lua, gofmt):", "go version");
-  if (!cmd) return;
-  log("$ " + cmd + " ...");
-  var r = await fetch(API + "/api/run", {
-    method: "POST",
-    headers: H,
-    body: JSON.stringify({ cmd: cmd })
+  if (running) return;
+  var dir = dirname(currentFile);
+  var ext = extOf(currentFile);
+  var base = basename(currentFile);
+  var chips = [];
+  if (ext === ".lua") chips.push("lua " + base);
+  if (ext === ".go") chips.push("go run " + base);
+  chips = chips.concat(["go run .", "go build .", "go vet ./...", "gofmt -l .", "go version"]);
+  loadHistory().forEach(function (h) { if (chips.indexOf(h) === -1) chips.push(h); });
+
+  var hist = loadHistory();
+  var r = await dialog({
+    title: "Jalankan command",
+    message: "Folder: /" + (dir ? rootName + "/" + dir : rootName) + "  (go, lua, gofmt)",
+    input: true, value: hist[0] || chips[0], placeholder: "go run .",
+    chips: chips,
+    buttons: [{ label: "Batal", value: "cancel" }, { label: "Jalankan", value: "ok", primary: true }]
   });
-  var j = await r.json();
-  log("$ " + cmd + "\n" + (j.output || "") + (j.error ? "\n[ERR] " + j.error : ""));
+  var cmd = r.text.trim();
+  if (r.button !== "ok" || !cmd) return;
+
+  if (isDirty()) { await saveFile(); }
+  saveHistory(cmd);
+  running = true;
+  $("runBtn").disabled = true;
+  showOut([{ cls: "o-cmd", text: "$ " + cmd + "\n" }, { cls: "o-dim", text: "Menjalankan..." }]);
+  try {
+    var j = await post("/api/run", { cmd: cmd, dir: dir });
+    var parts = [{ cls: "o-cmd", text: "$ " + cmd + "\n" }];
+    parts.push({ text: j.output ? j.output : "" });
+    if (j.error) parts.push({ cls: "o-err", text: (j.output && j.output.slice(-1) !== "\n" ? "\n" : "") + "[" + j.error + "]" });
+    else if (!j.output) parts.push({ cls: "o-dim", text: "(selesai, tanpa output)" });
+    showOut(parts);
+  } catch (e) {
+    showOut([{ cls: "o-cmd", text: "$ " + cmd + "\n" }, { cls: "o-err", text: e.message }]);
+    handleErr(e);
+  } finally {
+    running = false;
+    $("runBtn").disabled = false;
+  }
 }
 
-// Event wiring
-$('editor').addEventListener("input", updateHighlight);
-$('editor').addEventListener("scroll", syncScroll);
-$('editor').addEventListener("keyup", updateStatus);
-$('editor').addEventListener("click", updateStatus);
-$('editor').addEventListener("keydown", function(e) {
+/* ---------- tombol kunci tambahan ---------- */
+(function buildKeys() {
+  var keys = ["Tab", "{", "}", "(", ")", "[", "]", '"', "'", ";", ":", "=", "<", ">", "/", "\\", "|", "&", "!", "_", "#"];
+  var box = $("keys");
+  keys.forEach(function (k) {
+    var b = el("button", "key", k);
+    b.type = "button";
+    b.setAttribute("tabindex", "-1");
+    // pointerdown + preventDefault supaya keyboard HP gak nutup dan fokus tetap di editor
+    b.addEventListener("pointerdown", function (e) {
+      e.preventDefault();
+      insertText(k === "Tab" ? indentUnit() : k);
+    });
+    box.appendChild(b);
+  });
+})();
+
+/* ---------- event ---------- */
+var ed = $("editor");
+ed.addEventListener("input", onEdit);
+ed.addEventListener("scroll", syncScroll);
+document.addEventListener("selectionchange", function () {
+  if (document.activeElement === ed) updateStatus();
+});
+ed.addEventListener("keydown", function (e) {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+    e.preventDefault();
+    e.stopPropagation();
+    saveFile();
+    return;
+  }
   if (e.key === "Tab") {
     e.preventDefault();
-    var s = this.selectionStart, en = this.selectionEnd;
-    this.value = this.value.substring(0, s) + "    " + this.value.substring(en);
-    this.selectionStart = this.selectionEnd = s + 4;
-    updateHighlight();
+    insertText(indentUnit());
+    return;
+  }
+  if (e.key === "Enter" && !e.isComposing && ed.selectionStart === ed.selectionEnd) {
+    var pos = ed.selectionStart;
+    var v = ed.value;
+    var ls = v.lastIndexOf("\n", pos - 1) + 1;
+    var lead = /^[ \t]*/.exec(v.slice(ls, pos))[0];
+    var prev = v.slice(ls, pos).replace(/\s+$/, "").slice(-1);
+    var extra = "";
+    if (prev === "{" || prev === "(" || prev === "[" || (prev === ":" && extOf(currentFile) === ".py")) extra = indentUnit();
+    e.preventDefault();
+    insertText("\n" + lead + extra);
   }
 });
 
-listFiles();
-setInterval(function() {
-  if ($('listLabel').textContent.indexOf("offline") !== -1) listFiles();
-}, 3000);
+$("saveBtn").onclick = saveFile;
+$("runBtn").onclick = runCmd;
+$("closeBtn").onclick = function () { history.back(); };
+$("backBtn").onclick = function () { history.back(); };
+$("outClose").onclick = function () { $("outPanel").classList.remove("open"); };
+$("refreshBtn").onclick = function () { loadDir(cwd); };
+$("newFolderBtn").onclick = newFolder;
+$("newFileBtn").onclick = newFile;
+$("search").addEventListener("input", renderList);
+$("filter").addEventListener("change", renderList);
+
+window.addEventListener("popstate", function () { if (view === "editor") leaveEditor(); });
+window.addEventListener("beforeunload", function (e) {
+  if (isDirty()) { e.preventDefault(); e.returnValue = ""; }
+});
+document.addEventListener("keydown", function (e) {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s" && view === "editor") {
+    e.preventDefault();
+    saveFile();
+  }
+});
+
+/* ---------- mulai ---------- */
+if (TOKEN.charAt(0) === "_") {
+  showView("list");
+  $("fileItems").innerHTML = "";
+  var warn = el("div", "empty");
+  warn.appendChild(el("div", "big", "Buka lewat server"));
+  warn.appendChild(el("div", "", "Halaman ini harus dibuka dari http://127.0.0.1:8080 setelah netra-server jalan."));
+  $("fileItems").appendChild(warn);
+} else {
+  showView("list");
+  loadDir("");
+}
+
+})();
 </script>
 </body>
 </html>
