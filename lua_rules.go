@@ -40,27 +40,58 @@ func luaRulesDir() string {
 	return filepath.Join(home, ".netra-ai", "lua-rules")
 }
 
-// loadLuaRules — scan folder, cache daftar file
+// luaRulesDirs — semua folder rules, urutan prioritas:
+// 1) ~/.netra-ai/lua-rules (punya user, menimpa yang lain)
+// 2) lua-rules/ di sebelah binary
+// 3) ~/netra-ai/lua-rules (clone repo di Termux)
+// 4) lua-rules/ di folder kerja sekarang
+func luaRulesDirs() []string {
+	var dirs []string
+	if d := luaRulesDir(); d != "" {
+		dirs = append(dirs, d)
+	}
+	if exe, err := os.Executable(); err == nil {
+		dirs = append(dirs, filepath.Join(filepath.Dir(exe), "lua-rules"))
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		dirs = append(dirs, filepath.Join(home, "netra-ai", "lua-rules"))
+	}
+	if wd, err := os.Getwd(); err == nil {
+		dirs = append(dirs, filepath.Join(wd, "lua-rules"))
+	}
+	return dirs
+}
+
+// loadLuaRules — scan semua folder rules, cache daftar file.
+// Nama file yang sama dipakai dari folder berprioritas lebih tinggi.
 func loadLuaRules() int {
-	dir := luaRulesDir()
-	if dir == "" {
-		return 0
-	}
-
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return 0
-	}
-
 	luaRules = nil
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".lua") {
+	seenName := map[string]bool{}
+	seenDir := map[string]bool{}
+	for _, dir := range luaRulesDirs() {
+		abs, err := filepath.Abs(dir)
+		if err == nil {
+			dir = abs
+		}
+		if seenDir[dir] {
 			continue
 		}
-		luaRules = append(luaRules, LuaRule{
-			Name: strings.TrimSuffix(e.Name(), ".lua"),
-			Path: filepath.Join(dir, e.Name()),
-		})
+		seenDir[dir] = true
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			if e.IsDir() || !strings.HasSuffix(e.Name(), ".lua") {
+				continue
+			}
+			name := strings.TrimSuffix(e.Name(), ".lua")
+			if seenName[name] {
+				continue
+			}
+			seenName[name] = true
+			luaRules = append(luaRules, LuaRule{Name: name, Path: filepath.Join(dir, e.Name())})
+		}
 	}
 	return len(luaRules)
 }
@@ -89,7 +120,7 @@ func evalLuaRule(rule LuaRule, input string, inputRaw string) (string, bool) {
 	L := lua.NewState()
 	defer L.Close()
 
-	// Timeout via context (max 2 detik per rule)
+	// Timeout via context (max 10 detik per rule)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	L.SetContext(ctx)
