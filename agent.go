@@ -319,6 +319,26 @@ func cmdAgentRun(userPrompt string, cwd string, provider Provider) (string, erro
 		}
 
 		// Cek status code SEBELUM decode
+		for try := 0; try < 2 && resp.StatusCode == 429; try++ {
+			bodyRetry, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			wait, ok := agentRetryWait(resp.Header.Get("Retry-After"), string(bodyRetry))
+			if !ok || wait > 45*time.Second {
+				return log.String(), fmt.Errorf("HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(bodyRetry)))
+			}
+			agentEmit("think", "", fmt.Sprintf("kena rate limit, tunggu %ds (langkah %d)", int(wait.Seconds()), step), "")
+			time.Sleep(wait)
+			reqRetry, errRetry := http.NewRequest("POST", provider.BaseURL+"/chat/completions", bytes.NewReader(bodyBytes))
+			if errRetry != nil {
+				return log.String(), errRetry
+			}
+			reqRetry.Header.Set("Content-Type", "application/json")
+			reqRetry.Header.Set("Authorization", "Bearer "+provider.APIKey)
+			resp, err = client.Do(reqRetry)
+			if err != nil {
+				return log.String(), fmt.Errorf("HTTP: %w", err)
+			}
+		}
 		if resp.StatusCode != 200 {
 			bodyErr, _ := io.ReadAll(resp.Body)
 			resp.Body.Close()

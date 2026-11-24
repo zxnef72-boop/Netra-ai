@@ -190,31 +190,31 @@ func cmdBuildInstallerEXE(htmlFolder, appName string) (string, error) {
 	os.MkdirAll(workDir, 0755)
 	os.MkdirAll(outDir, 0755)
 
-	log.WriteString(fmt.Sprintf("📦 **Building EXE Installer: %s**\n\n", appName))
+	log.WriteString(fmt.Sprintf("**Building EXE Installer: %s**\n\n", appName))
 	log.WriteString(fmt.Sprintf("Folder : `%s`\n", htmlFolder))
 	log.WriteString(fmt.Sprintf("Workdir: `%s`\n\n", workDir))
 
 	// Step 1: compile viewer EXE
 	log.WriteString("  `→` compile viewer ")
 	if err := buildEXEViewer(workDir, exeName); err != nil {
-		log.WriteString("❌\n\n")
+		log.WriteString("GAGAL\n\n")
 		log.WriteString(fmt.Sprintf("**Error:**\n```\n%v\n```\n", err))
 		return log.String(), err
 	}
-	log.WriteString("✓\n")
+	log.WriteString("OK\n")
 
 	// Step 2: copy index.html
 	log.WriteString("  `→` copy html     ")
 	srcData, err := os.ReadFile(indexSrc)
 	if err != nil {
-		log.WriteString("❌\n")
+		log.WriteString("GAGAL\n")
 		return log.String(), err
 	}
 	if err := os.WriteFile(filepath.Join(workDir, "index.html"), srcData, 0644); err != nil {
-		log.WriteString("❌\n")
+		log.WriteString("GAGAL\n")
 		return log.String(), err
 	}
-	log.WriteString("✓\n")
+	log.WriteString("OK\n")
 
 	// Step 3: copy extra files (css, js, images)
 	entries, _ := os.ReadDir(htmlFolder)
@@ -230,17 +230,17 @@ func cmdBuildInstallerEXE(htmlFolder, appName string) (string, error) {
 			copyFile(src, dst)
 		}
 	}
-	log.WriteString("  `→` copy assets   ✓\n")
+	log.WriteString("  `→` copy assets   OK\n")
 
 	// Step 4: tulis installer.nsi
 	log.WriteString("  `→` nsi script    ")
 	nsi := strings.ReplaceAll(nsisTemplate, "__APPNAME__", appName)
 	nsi = strings.ReplaceAll(nsi, "__EXENAME__", exeName)
 	if err := os.WriteFile(filepath.Join(workDir, "installer.nsi"), []byte(nsi), 0644); err != nil {
-		log.WriteString("❌\n")
+		log.WriteString("GAGAL\n")
 		return log.String(), err
 	}
-	log.WriteString("✓\n")
+	log.WriteString("OK\n")
 
 	// Step 5: panggil makensis — auto-detect OS
 	log.WriteString("  `→` makensis      ")
@@ -263,7 +263,7 @@ func cmdBuildInstallerEXE(htmlFolder, appName string) (string, error) {
 
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		log.WriteString("❌\n\n")
+		log.WriteString("GAGAL\n\n")
 		log.WriteString(fmt.Sprintf("**makensis gagal:**\n```\n%s\n```\n", string(out)))
 		if runtime.GOOS == "windows" {
 			log.WriteString("\n**Info:** Pastikan NSIS terinstall di Windows.\n")
@@ -272,23 +272,23 @@ func cmdBuildInstallerEXE(htmlFolder, appName string) (string, error) {
 		}
 		return log.String(), err
 	}
-	log.WriteString("✓\n")
+	log.WriteString("OK\n")
 
 	// Step 6: copy Setup.exe ke output
 	log.WriteString("  `→` copy output   ")
 	setupSrc := filepath.Join(workDir, "Setup.exe")
 	setupDst := filepath.Join(outDir, safeName+"-Setup.exe")
 	if err := copyFile(setupSrc, setupDst); err != nil {
-		log.WriteString("❌\n")
+		log.WriteString("GAGAL\n")
 		return log.String(), err
 	}
-	log.WriteString("✓\n")
+	log.WriteString("OK\n")
 
 	fi, _ := os.Stat(setupDst)
-	log.WriteString(fmt.Sprintf("\n✅ **Installer siap!**\n"))
-	log.WriteString(fmt.Sprintf("📁 `%s` (%d KB)\n", setupDst, fi.Size()/1024))
-	log.WriteString(fmt.Sprintf("📁 Portable: `%s`\n", filepath.Join(workDir, exeName)))
-	log.WriteString("📲 Kirim Setup.exe ke PC → klik 2x → install\n")
+	log.WriteString(fmt.Sprintf("\n**Installer siap!**\n"))
+	log.WriteString(fmt.Sprintf("`%s` (%d KB)\n", setupDst, fi.Size()/1024))
+	log.WriteString(fmt.Sprintf("Portable: `%s`\n", filepath.Join(workDir, exeName)))
+	log.WriteString("Kirim Setup.exe ke PC → klik 2x → install\n")
 	return log.String(), nil
 }
 

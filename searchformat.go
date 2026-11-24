@@ -109,7 +109,7 @@ func formatSearchResults(results []searchResult, query string) string {
 			title = title[:77] + "..."
 		}
 
-		sb.WriteString(fmt.Sprintf("📌 %s\n", title))
+		sb.WriteString(fmt.Sprintf("%s\n", title))
 		sb.WriteString(fmt.Sprintf("   └─ %s\n", extractDomain(r.URL)))
 
 		if i < maxShow-1 {

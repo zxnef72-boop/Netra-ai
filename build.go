@@ -26,7 +26,7 @@ func cmdBuildEXE(targetURL, appName string) error {
 	if err := os.MkdirAll(outDir, 0755); err != nil {
 		return err
 	}
-	fmt.Println("⚠️ Build EXE belum diimplementasi. Pakai Pake CLI nanti.")
+	fmt.Println("PERINGATAN Build EXE belum diimplementasi. Pakai Pake CLI nanti.")
 	return nil
 }
 

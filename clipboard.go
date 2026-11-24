@@ -22,6 +22,15 @@ func detectClipboardTool() (string, []string) {
 	if runtime.GOOS == "windows" {
 		return "clip", nil
 	}
+	// WSL: pakai clipboard Windows (win32yank lebih bagus untuk UTF-8)
+	if platIsWSL() {
+		if _, err := exec.LookPath("win32yank.exe"); err == nil {
+			return "win32yank.exe", []string{"-i", "--crlf"}
+		}
+		if _, err := exec.LookPath("clip.exe"); err == nil {
+			return "clip.exe", nil
+		}
+	}
 	// Linux Wayland
 	if _, err := exec.LookPath("wl-copy"); err == nil {
 		return "wl-copy", nil
@@ -51,5 +60,5 @@ func copyToClipboard(text string) error {
 type clipboardError struct{}
 
 func (e *clipboardError) Error() string {
-	return "clipboard tool gak ketemu (install: termux-clipboard-set / xclip / wl-copy / pbcopy)"
+	return "clipboard tool gak ketemu (install: termux-clipboard-set / xclip / wl-copy / pbcopy; WSL: clip.exe)"
 }

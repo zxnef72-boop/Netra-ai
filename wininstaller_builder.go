@@ -246,7 +246,7 @@ func cmdBuildWinInstaller(htmlFolder, appName string) (string, error) {
 	os.MkdirAll(workDir, 0755)
 	os.MkdirAll(outDir, 0755)
 
-	log.WriteString(fmt.Sprintf("🏗️  **Building Go Installer: %s**\n\n", appName))
+	log.WriteString(fmt.Sprintf("**Building Go Installer: %s**\n\n", appName))
 	log.WriteString(fmt.Sprintf("Folder : `%s`\n", htmlFolder))
 	log.WriteString(fmt.Sprintf("WorkDir: `%s`\n\n", workDir))
 
@@ -254,7 +254,7 @@ func cmdBuildWinInstaller(htmlFolder, appName string) (string, error) {
 	installerDir := filepath.Join(workDir, "installer")
 	payloadDir := filepath.Join(installerDir, "payload")
 	os.MkdirAll(payloadDir, 0755)
-	log.WriteString("  `→` folders     ✓\n")
+	log.WriteString("  `→` folders     OK\n")
 
 	// 2. Compile viewer EXE (yang buka HTML)
 	viewerWork := filepath.Join(workDir, "viewer")
@@ -322,10 +322,10 @@ func main() {
 		"GOOS=windows", "GOARCH=amd64", "CGO_ENABLED=0")
 
 	if out, err := viewerCmd.CombinedOutput(); err != nil {
-		log.WriteString(fmt.Sprintf("  `→` viewer      ❌\n\n```\n%s\n```\n", string(out)))
+		log.WriteString(fmt.Sprintf("  `→` viewer      GAGAL\n\n```\n%s\n```\n", string(out)))
 		return log.String(), err
 	}
-	log.WriteString("  `→` viewer      ✓\n")
+	log.WriteString("  `→` viewer      OK\n")
 
 	// 2b. Compile uninstaller EXE (bersihin install)
 	uninstallerSrc := strings.ReplaceAll(uninstallerTemplate, "__APPNAME__", appName)
@@ -345,10 +345,10 @@ func main() {
 		"GOOS=windows", "GOARCH=amd64", "CGO_ENABLED=0")
 
 	if out, err := uninstallerCmd.CombinedOutput(); err != nil {
-		log.WriteString(fmt.Sprintf("  `→` uninstaller ❌\n\n```\n%s\n```\n", string(out)))
+		log.WriteString(fmt.Sprintf("  `→` uninstaller GAGAL\n\n```\n%s\n```\n", string(out)))
 		return log.String(), err
 	}
-	log.WriteString("  `→` uninstaller ✓\n")
+	log.WriteString("  `→` uninstaller OK\n")
 
 	// 3. Copy HTML + assets ke payload
 	data, _ := os.ReadFile(indexPath)
@@ -369,7 +369,7 @@ func main() {
 			copyFile(src, dst)
 		}
 	}
-	log.WriteString("  `→` payload     ✓\n")
+	log.WriteString("  `→` payload     OK\n")
 
 	// 4. Generate installer main.go
 	installerSrc := strings.ReplaceAll(installerTemplate, "__APPNAME__", appName)
@@ -377,7 +377,7 @@ func main() {
 	installerSrc = strings.ReplaceAll(installerSrc, "__SAFENAME__", safeName)
 	os.WriteFile(filepath.Join(installerDir, "main.go"), []byte(installerSrc), 0644)
 	os.WriteFile(filepath.Join(installerDir, "go.mod"), []byte("module netrainstaller\n\ngo 1.21\n"), 0644)
-	log.WriteString("  `→` installer   ✓\n")
+	log.WriteString("  `→` installer   OK\n")
 
 	// 5. Compile Setup.exe
 	setupPath := filepath.Join(workDir, safeName+"-Setup.exe")
@@ -390,22 +390,22 @@ func main() {
 		"GOOS=windows", "GOARCH=amd64", "CGO_ENABLED=0")
 
 	if out, err := installerCmd.CombinedOutput(); err != nil {
-		log.WriteString(fmt.Sprintf("  `→` compile     ❌\n\n```\n%s\n```\n", string(out)))
+		log.WriteString(fmt.Sprintf("  `→` compile     GAGAL\n\n```\n%s\n```\n", string(out)))
 		return log.String(), err
 	}
-	log.WriteString("  `→` compile     ✓\n")
+	log.WriteString("  `→` compile     OK\n")
 
 	// 6. Copy ke output
 	finalPath := filepath.Join(outDir, safeName+"-Setup.exe")
 	if err := copyFile(setupPath, finalPath); err != nil {
-		log.WriteString(fmt.Sprintf("  `→` copy        ❌ %v\n", err))
+		log.WriteString(fmt.Sprintf("  `→` copy        GAGAL %v\n", err))
 		return log.String(), err
 	}
-	log.WriteString("  `→` copy        ✓\n")
+	log.WriteString("  `→` copy        OK\n")
 
 	fi, _ := os.Stat(finalPath)
-	log.WriteString(fmt.Sprintf("\n✅ **Setup.exe siap! (Go installer, tanpa NSIS)**\n"))
-	log.WriteString(fmt.Sprintf("📁 `%s` (%d KB)\n", finalPath, fi.Size()/1024))
+	log.WriteString(fmt.Sprintf("\n**Setup.exe siap! (Go installer, tanpa NSIS)**\n"))
+	log.WriteString(fmt.Sprintf("`%s` (%d KB)\n", finalPath, fi.Size()/1024))
 	log.WriteString("\n**Cara pakai di PC:**\n")
 	log.WriteString("1. Copy Setup.exe ke PC\n")
 	log.WriteString("2. Klik 2x → auto install\n")

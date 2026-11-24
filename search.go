@@ -121,7 +121,7 @@ func (m *Model) handleSearch(args []string) {
 	}
 
 	query := strings.Join(args[1:], " ")
-	m.messages = append(m.messages, ChatMsg{Role: "user", Text: "🔍 " + query})
+	m.messages = append(m.messages, ChatMsg{Role: "user", Text: "" + query})
 
 	cfg, _ := loadConfig()
 	var results []searchResult

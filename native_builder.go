@@ -285,11 +285,11 @@ func cmdBuildNativeAPK(dataJSONPath, appNameOverride string) (string, error) {
 	home, _ := os.UserHomeDir()
 	pkg := makePackageName(cfg.AppName)
 	workDir := filepath.Join(home, "apk-build", sanitizeName(cfg.AppName)+"_native_"+fmt.Sprintf("%d", time.Now().Unix()))
-	outDir := "/sdcard/NetRatest1/apk-output"
+	outDir := defaultApkOutDir()
 
 	os.MkdirAll(outDir, 0755)
 
-	log.WriteString(fmt.Sprintf("🎨 **Building NATIVE APK: %s**\n\n", cfg.AppName))
+	log.WriteString(fmt.Sprintf("**Building NATIVE APK: %s**\n\n", cfg.AppName))
 	log.WriteString(fmt.Sprintf("Template: `notes-app`\n"))
 	log.WriteString(fmt.Sprintf("Package : `%s`\n", pkg))
 	log.WriteString(fmt.Sprintf("Notes   : %d item\n", len(cfg.Notes)))
@@ -312,13 +312,13 @@ func cmdBuildNativeAPK(dataJSONPath, appNameOverride string) (string, error) {
 			return log.String(), err
 		}
 	}
-	log.WriteString("  `→` folders      ✓\n")
+	log.WriteString("  `→` folders      OK\n")
 
 	// 2. AndroidManifest.xml
 	if err := writeFileTmp(filepath.Join(workDir, "AndroidManifest.xml"), generateAndroidManifest(pkg, cfg.AppName)); err != nil {
 		return log.String(), err
 	}
-	log.WriteString("  `→` manifest     ✓\n")
+	log.WriteString("  `→` manifest     OK\n")
 
 	// 3. Resources XML
 	srcPath := filepath.Join(workDir, "src", strings.ReplaceAll(pkg, ".", "/"))
@@ -335,21 +335,21 @@ func cmdBuildNativeAPK(dataJSONPath, appNameOverride string) (string, error) {
 	if err := writeFileTmp(filepath.Join(workDir, "res", "layout", "item_note.xml"), generateItemNoteXML()); err != nil {
 		return log.String(), err
 	}
-	log.WriteString("  `→` resources    ✓\n")
+	log.WriteString("  `→` resources    OK\n")
 
 	// 4. MainActivity.java
 	javaPath := filepath.Join(workDir, "src", strings.ReplaceAll(pkg, ".", "/"), "MainActivity.java")
 	if err := writeFileTmp(javaPath, generateMainActivityJava(pkg, cfg)); err != nil {
 		return log.String(), err
 	}
-	log.WriteString("  `→` java         ✓\n")
+	log.WriteString("  `→` java         OK\n")
 
 	// 5. Icon (pake generateIcons kalau ada dari apkbuilder.go)
 	iconCfg := apkConfig{WorkDir: workDir, IconPath: ""}
 	if err := generateIconsGo(iconCfg); err != nil {
-		log.WriteString("  `→` icon         ⚠ (skip)\n")
+		log.WriteString("  `→` icon         PERINGATAN (skip)\n")
 	} else {
-		log.WriteString("  `→` icon         ✓\n")
+		log.WriteString("  `→` icon         OK\n")
 	}
 
 	// 6. Compile Java
@@ -362,10 +362,10 @@ func cmdBuildNativeAPK(dataJSONPath, appNameOverride string) (string, error) {
 	)
 	out, err := compileCmd.CombinedOutput()
 	if err != nil {
-		log.WriteString(fmt.Sprintf("  `→` compile      ❌\n\n```\n%s\n```\n", string(out)))
+		log.WriteString(fmt.Sprintf("  `→` compile      GAGAL\n\n```\n%s\n```\n", string(out)))
 		return log.String(), err
 	}
-	log.WriteString("  `→` compile      ✓\n")
+	log.WriteString("  `→` compile      OK\n")
 
 	// 7. Dex
 	dexCmd := exec.Command("dx", "--dex",
@@ -374,10 +374,10 @@ func cmdBuildNativeAPK(dataJSONPath, appNameOverride string) (string, error) {
 	)
 	out, err = dexCmd.CombinedOutput()
 	if err != nil {
-		log.WriteString(fmt.Sprintf("  `→` dex          ❌\n\n```\n%s\n```\n", string(out)))
+		log.WriteString(fmt.Sprintf("  `→` dex          GAGAL\n\n```\n%s\n```\n", string(out)))
 		return log.String(), err
 	}
-	log.WriteString("  `→` dex          ✓\n")
+	log.WriteString("  `→` dex          OK\n")
 
 	// 8. Package (aapt)
 	unsigned := filepath.Join(workDir, "app-unsigned.apk")
@@ -390,20 +390,20 @@ func cmdBuildNativeAPK(dataJSONPath, appNameOverride string) (string, error) {
 	)
 	out, err = aaptCmd.CombinedOutput()
 	if err != nil {
-		log.WriteString(fmt.Sprintf("  `→` package      ❌\n\n```\n%s\n```\n", string(out)))
+		log.WriteString(fmt.Sprintf("  `→` package      GAGAL\n\n```\n%s\n```\n", string(out)))
 		return log.String(), err
 	}
-	log.WriteString("  `→` package      ✓\n")
+	log.WriteString("  `→` package      OK\n")
 
 	// 9. Add classes.dex
 	addCmd := exec.Command("aapt", "add", unsigned, "classes.dex")
 	addCmd.Dir = workDir
 	out, err = addCmd.CombinedOutput()
 	if err != nil {
-		log.WriteString(fmt.Sprintf("  `→` add dex      ❌\n\n```\n%s\n```\n", string(out)))
+		log.WriteString(fmt.Sprintf("  `→` add dex      GAGAL\n\n```\n%s\n```\n", string(out)))
 		return log.String(), err
 	}
-	log.WriteString("  `→` add dex      ✓\n")
+	log.WriteString("  `→` add dex      OK\n")
 
 	// 10. Sign
 	keystore := filepath.Join(home, ".netra-ai", "netra.keystore")
@@ -423,10 +423,10 @@ func cmdBuildNativeAPK(dataJSONPath, appNameOverride string) (string, error) {
 	)
 	out, err = signCmd.CombinedOutput()
 	if err != nil {
-		log.WriteString(fmt.Sprintf("  `→` sign         ❌\n\n```\n%s\n```\n", string(out)))
+		log.WriteString(fmt.Sprintf("  `→` sign         GAGAL\n\n```\n%s\n```\n", string(out)))
 		return log.String(), err
 	}
-	log.WriteString("  `→` sign         ✓\n")
+	log.WriteString("  `→` sign         OK\n")
 
 	// Copy ke output
 	finalPath := filepath.Join(outDir, sanitizeName(cfg.AppName)+".apk")
@@ -435,8 +435,8 @@ func cmdBuildNativeAPK(dataJSONPath, appNameOverride string) (string, error) {
 	}
 
 	fi, _ := os.Stat(finalPath)
-	log.WriteString(fmt.Sprintf("\n✅ **APK native siap!**\n"))
-	log.WriteString(fmt.Sprintf("📁 `%s` (%d KB)\n", finalPath, fi.Size()/1024))
-	log.WriteString("🎨 Native UI — bukan WebView\n")
+	log.WriteString(fmt.Sprintf("\n**APK native siap!**\n"))
+	log.WriteString(fmt.Sprintf("`%s` (%d KB)\n", finalPath, fi.Size()/1024))
+	log.WriteString("Native UI — bukan WebView\n")
 	return log.String(), nil
 }

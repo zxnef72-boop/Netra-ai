@@ -418,7 +418,7 @@ func elizaReplyCore(input string) string {
 		if strings.Contains(lowOSINT, kw) {
 			path := "osint-templates/" + file
 			if data, err := os.ReadFile(path); err == nil {
-				return fmt.Sprintf("**📄 Template: `%s`**\n\nCopy ke file dan jalanin:\n```\npython3 %s <argumen>\n```\n\n```python\n%s\n```",
+				return fmt.Sprintf("**Template: `%s`**\n\nCopy ke file dan jalanin:\n```\npython3 %s <argumen>\n```\n\n```python\n%s\n```",
 					file, file, strings.TrimRight(string(data), "\n"))
 			}
 		}
@@ -487,7 +487,7 @@ func elizaReplyCore(input string) string {
 					}
 					for _, path := range paths {
 						if data, err := os.ReadFile(path); err == nil {
-							return fmt.Sprintf("**📄 Template Python: `%s`**\n\n_%s_\n\n**Cara pakai:**\n```\npython3 %s <argumen>\n```\n\n```python\n%s\n```",
+							return fmt.Sprintf("**Template Python: `%s`**\n\n_%s_\n\n**Cara pakai:**\n```\npython3 %s <argumen>\n```\n\n```python\n%s\n```",
 								tpl.file, tpl.desc, tpl.file,
 								strings.TrimRight(string(data), "\n"))
 						}
@@ -675,7 +675,7 @@ func elizaReplyCore(input string) string {
 			if len(content) > 3000 {
 				content = content[:3000] + "\n...\n(terpotong)"
 			}
-			return fmt.Sprintf("📄 **%s** (%d bytes)\n\n```\n%s\n```",
+			return fmt.Sprintf("**%s** (%d bytes)\n\n```\n%s\n```",
 				arg, info.Size(), strings.TrimRight(content, "\n"))
 		}
 
@@ -691,7 +691,7 @@ func elizaReplyCore(input string) string {
 			}
 			out := ""
 			if title != "" {
-				out = "📖 **" + title + "**\n\n"
+				out = "**" + title + "**\n\n"
 			}
 			out += "```\n" + content + "\n```"
 			return out
@@ -764,17 +764,17 @@ func elizaReplyCore(input string) string {
 				return fmt.Sprintf("Hari ini %s, %s.", time.Now().Format("Senin"), time.Now().Format("02 Januari 2006"))
 			case "__COIN__":
 				if rand.Intn(2) == 0 {
-					return "🪙 Heads (gambar)!"
+					return "Heads (gambar)!"
 				}
-				return "🪙 Tails (angka)!"
+				return "Tails (angka)!"
 			case "__DICE__":
-				return fmt.Sprintf("🎲 Dadu: **%d**", rand.Intn(6)+1)
+				return fmt.Sprintf("Dadu: **%d**", rand.Intn(6)+1)
 			case "__QUOTE__":
 				return elizaQuotes[rand.Intn(len(elizaQuotes))]
 			case "__JOKE__":
 				return elizaJokes[rand.Intn(len(elizaJokes))]
 			case "__RANDOM__":
-				return fmt.Sprintf("🎯 Angka acak: **%d**", rand.Intn(100)+1)
+				return fmt.Sprintf("Angka acak: **%d**", rand.Intn(100)+1)
 			}
 
 			// Simpan nama
@@ -1178,7 +1178,7 @@ func elizaTryTemplate(input string) (string, bool) {
 				lang = "css"
 			}
 			nameNoExt := strings.TrimSuffix(foundFile, ext)
-			return fmt.Sprintf("📄 **Template: %s** (dari `templates/%s`)\n\n```%s\n%s\n```\n\n"+
+			return fmt.Sprintf("**Template: %s** (dari `templates/%s`)\n\n```%s\n%s\n```\n\n"+
 				"Ketik `/template %s` buat save ke folder aktif.",
 				foundKeyword, foundFile, lang, strings.TrimRight(string(data), "\n"), nameNoExt), true
 		}
@@ -1248,7 +1248,7 @@ func elizaTryTutorial(input string) (string, bool) {
 		return "", false
 	}
 	display := strings.TrimSuffix(fname, ".txt")
-	return fmt.Sprintf("📖 **Tutorial: %s**\n\n```\n%s\n```",
+	return fmt.Sprintf("**Tutorial: %s**\n\n```\n%s\n```",
 		strings.ReplaceAll(display, "-", " "),
 		strings.TrimRight(content, "\n")), true
 }

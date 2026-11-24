@@ -93,7 +93,7 @@ func cmdBuildAPKFullscreen(targetURL, appName string) (string, error) {
 	workDir := filepath.Join(home, "apk-build", sanitizeName(appName)+"_"+fmt.Sprintf("%d", time.Now().Unix()))
 	outDir := os.Getenv("NETRA_OUT_DIR")
 	if outDir == "" {
-		outDir = "/sdcard/NetRatest1/apk-output"
+		outDir = defaultApkOutDir()
 	}
 	os.MkdirAll(outDir, 0755)
 

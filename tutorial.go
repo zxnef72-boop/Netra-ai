@@ -131,7 +131,7 @@ func (m *Model) handleTutorial(args []string) {
 
 	display := strings.TrimSuffix(fname, ".txt")
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("📖 **Tutorial: %s**\n\n", strings.ReplaceAll(display, "-", " ")))
+	sb.WriteString(fmt.Sprintf("**Tutorial: %s**\n\n", strings.ReplaceAll(display, "-", " ")))
 	sb.WriteString("```\n")
 	sb.WriteString(strings.TrimRight(content, "\n"))
 	sb.WriteString("\n```")

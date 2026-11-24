@@ -103,7 +103,7 @@ func (m *Model) handleBaca(args []string) {
 	}
 
 	url := args[1]
-	m.messages = append(m.messages, ChatMsg{Role: "user", Text: "📖 " + url})
+	m.messages = append(m.messages, ChatMsg{Role: "user", Text: "" + url})
 
 	title, content, err := fetchURL(url)
 	if err != nil {
@@ -124,7 +124,7 @@ func (m *Model) handleBaca(args []string) {
 	urlStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7aa2f7"))
 
 	if title != "" {
-		sb.WriteString(titleStyle.Render("📄 "+title) + "\n")
+		sb.WriteString(titleStyle.Render(""+title) + "\n")
 	}
 	sb.WriteString(urlStyle.Render(url) + "\n\n")
 	sb.WriteString("```\n")

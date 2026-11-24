@@ -93,7 +93,7 @@ func cmdBuildAPKFromHTMLJava(htmlFolder, indexPath, appName string, fullscreen b
 	home, _ := os.UserHomeDir()
 	pkg := "com.netra." + sanitizeName(strings.ToLower(appName))
 	workDir := filepath.Join(home, "apk-build", sanitizeName(appName)+"_html_"+fmt.Sprintf("%d", time.Now().Unix()))
-	outDir := "/sdcard/NetRatest1/apk-output"
+	outDir := defaultApkOutDir()
 	os.MkdirAll(outDir, 0755)
 
 	// 3. Cari icon custom
@@ -118,7 +118,7 @@ func cmdBuildAPKFromHTMLJava(htmlFolder, indexPath, appName string, fullscreen b
 		IconPath:    iconPath,
 	}
 
-	log.WriteString(fmt.Sprintf("📦 **Building APK (HTML mode): %s**\n\n", appName))
+	log.WriteString(fmt.Sprintf("**Building APK (HTML mode): %s**\n\n", appName))
 	log.WriteString(fmt.Sprintf("Folder : `%s`\n", htmlFolder))
 	log.WriteString(fmt.Sprintf("Package: `%s`\n\n", pkg))
 
@@ -153,24 +153,24 @@ func cmdBuildAPKFromHTMLJava(htmlFolder, indexPath, appName string, fullscreen b
 	for _, s := range steps {
 		log.WriteString(fmt.Sprintf("  `→` %-10s ", s.name))
 		if err := s.fn(cfg); err != nil {
-			log.WriteString("❌\n\n")
+			log.WriteString("GAGAL\n\n")
 			log.WriteString(fmt.Sprintf("**Error di step `%s`:**\n```\n%v\n```\n", s.name, err))
 			return log.String(), err
 		}
-		log.WriteString("✓\n")
+		log.WriteString("OK\n")
 	}
 
 	// 5. Copy ke output
 	finalPath := filepath.Join(cfg.OutputDir, sanitizeName(appName)+".apk")
 	if err := copyFile(filepath.Join(cfg.WorkDir, "app-signed.apk"), finalPath); err != nil {
-		log.WriteString(fmt.Sprintf("\n❌ Gagal copy: %v\n", err))
+		log.WriteString(fmt.Sprintf("\nGAGAL: copy: %v\n", err))
 		return log.String(), err
 	}
 
 	fi, _ := os.Stat(finalPath)
-	log.WriteString(fmt.Sprintf("\n✅ **APK siap! (offline)**\n"))
-	log.WriteString(fmt.Sprintf("📁 `%s` (%d KB)\n", finalPath, fi.Size()/1024))
-	log.WriteString("📲 Install → jalan tanpa internet\n")
+	log.WriteString(fmt.Sprintf("\n**APK siap! (offline)**\n"))
+	log.WriteString(fmt.Sprintf("`%s` (%d KB)\n", finalPath, fi.Size()/1024))
+	log.WriteString("Install → jalan tanpa internet\n")
 	return log.String(), nil
 }
 

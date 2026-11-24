@@ -141,16 +141,16 @@ func scanAPKFile(apkPath string) string {
 
 	fi, err := os.Stat(apkPath)
 	if err != nil {
-		return fmt.Sprintf("❌ File gak ketemu: %s", apkPath)
+		return fmt.Sprintf("GAGAL: File gak ketemu: %s", apkPath)
 	}
 
-	sb.WriteString(fmt.Sprintf("🔍 **Scan APK: %s**\n", filepath.Base(apkPath)))
-	sb.WriteString(fmt.Sprintf("📊 Size: %.1f KB\n\n", float64(fi.Size())/1024))
+	sb.WriteString(fmt.Sprintf("**Scan APK: %s**\n", filepath.Base(apkPath)))
+	sb.WriteString(fmt.Sprintf("Size: %.1f KB\n\n", float64(fi.Size())/1024))
 
 	// Sanity: beneran APK (ZIP)?
 	typeOut, _ := exec.Command("file", apkPath).Output()
 	if !strings.Contains(string(typeOut), "Zip") {
-		sb.WriteString("⚠️ **Bukan file ZIP/APK valid** — scan dilanjut, hasil mungkin aneh\n\n")
+		sb.WriteString("[WASPADA] **Bukan file ZIP/APK valid** — scan dilanjut, hasil mungkin aneh\n\n")
 	}
 
 	riskScore := 0
@@ -158,7 +158,7 @@ func scanAPKFile(apkPath string) string {
 	// === 1. aapt dump badging ===
 	badging, aerr := exec.Command("aapt", "dump", "badging", apkPath).Output()
 	if aerr != nil {
-		sb.WriteString("⚠️ `aapt` gagal — APK mungkin corrupt\n")
+		sb.WriteString("[WASPADA] `aapt` gagal — APK mungkin corrupt\n")
 	} else {
 		lines := strings.Split(string(badging), "\n")
 		var perms []string
@@ -183,31 +183,31 @@ func scanAPKFile(apkPath string) string {
 			}
 		}
 
-		sb.WriteString("📦 **Info dasar**\n")
+		sb.WriteString("**Info dasar**\n")
 		sb.WriteString(fmt.Sprintf("  Package  : `%s`\n", pkgName))
 		sb.WriteString(fmt.Sprintf("  Activity : `%s`\n", launchActivity))
 
 		if isFakePackage(pkgName) {
-			sb.WriteString("  🚨 **NAMA MENCURIGAKAN!** Mirip app terkenal / pake kata 'mod/free'\n")
+			sb.WriteString("  [BAHAYA] **NAMA MENCURIGAKAN!** Mirip app terkenal / pake kata 'mod/free'\n")
 			riskScore += 3
 		}
 		sb.WriteString("\n")
 
 		// === Permissions ===
-		sb.WriteString(fmt.Sprintf("🔐 **Permissions (%d total)**\n", len(perms)))
+		sb.WriteString(fmt.Sprintf("**Permissions (%d total)**\n", len(perms)))
 		dangerCount := 0
 		for _, p := range perms {
 			short := strings.TrimPrefix(p, "android.permission.")
 			if desc, ok := dangerousPerms[p]; ok {
-				sb.WriteString(fmt.Sprintf("  🚨 `%s` → %s\n", short, desc))
+				sb.WriteString(fmt.Sprintf("  [BAHAYA] `%s` → %s\n", short, desc))
 				riskScore++
 				dangerCount++
 			} else if strings.Contains(p, "INTERNET") || strings.Contains(p, "NETWORK") {
-				sb.WriteString(fmt.Sprintf("  ✅ `%s` (wajar)\n", short))
+				sb.WriteString(fmt.Sprintf("  [AMAN] `%s` (wajar)\n", short))
 			}
 		}
 		if dangerCount == 0 {
-			sb.WriteString("  ✅ Gak ada permission berbahaya\n")
+			sb.WriteString("  [AMAN] Gak ada permission berbahaya\n")
 		}
 		sb.WriteString("\n")
 	}
@@ -215,7 +215,7 @@ func scanAPKFile(apkPath string) string {
 	// === 2. Extract classes.dex + strings ===
 	tmpDir, err := os.MkdirTemp("", "apkscan-*")
 	if err != nil {
-		sb.WriteString("⚠️ Gagal bikin temp dir\n")
+		sb.WriteString("[WASPADA] Gagal bikin temp dir\n")
 	} else {
 		defer os.RemoveAll(tmpDir)
 
@@ -223,7 +223,7 @@ func scanAPKFile(apkPath string) string {
 		dexPath := filepath.Join(tmpDir, "classes.dex")
 
 		if _, err := os.Stat(dexPath); err != nil {
-			sb.WriteString("⚠️ Gak ada `classes.dex` — kemungkinan APK kosong / corrupt\n\n")
+			sb.WriteString("[WASPADA] Gak ada `classes.dex` — kemungkinan APK kosong / corrupt\n\n")
 		} else {
 			stringsOut, _ := exec.Command("strings", dexPath).Output()
 			content := string(stringsOut)
@@ -233,9 +233,9 @@ func scanAPKFile(apkPath string) string {
 
 			// C2 KUAT (paling bahaya)
 			if len(strongC2) > 0 {
-				sb.WriteString("🚨 **C2 KUAT — BUKTI NYATA**\n")
+				sb.WriteString("[BAHAYA] **C2 KUAT — BUKTI NYATA**\n")
 				for _, c := range strongC2 {
-					sb.WriteString(fmt.Sprintf("  ❌ `%s`\n", c))
+					sb.WriteString(fmt.Sprintf("  [C2] `%s`\n", c))
 					riskScore += 5
 				}
 				sb.WriteString("\n")
@@ -243,13 +243,13 @@ func scanAPKFile(apkPath string) string {
 
 			// SEMUA URL MENTAH
 			if len(urls) > 0 {
-				sb.WriteString(fmt.Sprintf("🌐 **Semua URL (%d unik, dari classes.dex):**\n", len(urls)))
+				sb.WriteString(fmt.Sprintf("**Semua URL (%d unik, dari classes.dex):**\n", len(urls)))
 				for _, u := range urls {
-					mark := "  ❓ "
+					mark := "  [?] "
 					if isWhitelistedDomain(u) {
-						mark = "  ✅ "
+						mark = "  [AMAN] "
 					} else if strings.HasPrefix(strings.ToLower(u), "http://") {
-						mark = "  ⚠️ "
+						mark = "  [WASPADA] "
 					}
 					sb.WriteString(fmt.Sprintf("%s`%s`\n", mark, u))
 				}
@@ -258,9 +258,9 @@ func scanAPKFile(apkPath string) string {
 
 			// SEMUA IP MENTAH (non-private)
 			if len(ips) > 0 {
-				sb.WriteString(fmt.Sprintf("📡 **IP mentah (%d unik):**\n", len(ips)))
+				sb.WriteString(fmt.Sprintf("**IP mentah (%d unik):**\n", len(ips)))
 				for _, ip := range ips {
-					sb.WriteString(fmt.Sprintf("  ❓ `%s`\n", ip))
+					sb.WriteString(fmt.Sprintf("  [?] `%s`\n", ip))
 				}
 				sb.WriteString("\n")
 			}
@@ -275,16 +275,16 @@ func scanAPKFile(apkPath string) string {
 	var icon, verdict string
 	switch {
 	case riskScore >= 7:
-		icon = "🚨"
+		icon = "[BAHAYA]"
 		verdict = "**BAHAYA TINGGI** — kemungkinan besar RAT/spyware"
 	case riskScore >= 4:
-		icon = "⚠️"
+		icon = "[WASPADA]"
 		verdict = "**MENCURIGAKAN** — cek manual sebelum install"
 	case riskScore >= 1:
-		icon = "🟡"
+		icon = "[RENDAH]"
 		verdict = "**RENDAH** — kemungkinan aman, tapi ada yang aneh"
 	default:
-		icon = "✅"
+		icon = "[AMAN]"
 		verdict = "**AMAN** — gak ada indikasi bahaya"
 	}
 

@@ -51,7 +51,7 @@ func cmdBuildAPKFromURL(targetURL, appName string, opts ...bool) (string, error)
 	workDir := filepath.Join(home, "apk-build", sanitizeName(appName)+"_"+fmt.Sprintf("%d", time.Now().Unix()))
 	outDir := os.Getenv("NETRA_OUT_DIR")
 	if outDir == "" {
-		outDir = "/sdcard/NetRatest1/apk-output"
+		outDir = defaultApkOutDir()
 	}
 	os.MkdirAll(outDir, 0755)
 
@@ -77,7 +77,7 @@ func cmdBuildAPKFromURL(targetURL, appName string, opts ...bool) (string, error)
 		IconPath:    iconPath,
 	}
 
-	log.WriteString(fmt.Sprintf("📦 **Building APK: %s**\n\n", appName))
+	log.WriteString(fmt.Sprintf("**Building APK: %s**\n\n", appName))
 	log.WriteString(fmt.Sprintf("URL : `%s`\n", targetURL))
 	log.WriteString(fmt.Sprintf("Versi: `%s` (code %d)\n", versionName, versionCode))
 	if iconPath != "" {
@@ -104,23 +104,23 @@ func cmdBuildAPKFromURL(targetURL, appName string, opts ...bool) (string, error)
 	for _, s := range steps {
 		log.WriteString(fmt.Sprintf("  `→` %-10s ", s.name))
 		if err := s.fn(cfg); err != nil {
-			log.WriteString("❌\n\n")
+			log.WriteString("GAGAL\n\n")
 			log.WriteString(fmt.Sprintf("**Error di step `%s`:**\n```\n%v\n```\n", s.name, err))
 			return log.String(), err
 		}
-		log.WriteString("✓\n")
+		log.WriteString("OK\n")
 	}
 
 	finalPath := filepath.Join(cfg.OutputDir, sanitizeName(appName)+".apk")
 	if err := copyFile(filepath.Join(cfg.WorkDir, "app-signed.apk"), finalPath); err != nil {
-		log.WriteString(fmt.Sprintf("\n❌ Gagal copy: %v\n", err))
+		log.WriteString(fmt.Sprintf("\nGAGAL: copy: %v\n", err))
 		return log.String(), err
 	}
 
 	fi, _ := os.Stat(finalPath)
-	log.WriteString(fmt.Sprintf("\n✅ **APK siap!**\n"))
-	log.WriteString(fmt.Sprintf("📁 `%s` (%d KB)\n", finalPath, fi.Size()/1024))
-	log.WriteString(fmt.Sprintf("📲 Install dari file manager → tap file → Install\n"))
+	log.WriteString(fmt.Sprintf("\n**APK siap!**\n"))
+	log.WriteString(fmt.Sprintf("`%s` (%d KB)\n", finalPath, fi.Size()/1024))
+	log.WriteString(fmt.Sprintf("Install dari file manager → tap file → Install\n"))
 	return log.String(), nil
 }
 

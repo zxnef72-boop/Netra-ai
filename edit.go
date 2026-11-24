@@ -152,7 +152,7 @@ func (m *Model) completeEdit() {
 
 	// Notif sukses
 	m.messages = append(m.messages, ChatMsg{Role: "assistant",
-		Text: fmt.Sprintf("✓ **%s** diupdate (%d byte)\n\n"+
+		Text: fmt.Sprintf("OK **%s** diupdate (%d byte)\n\n"+
 			"Backup: `%s`\n\n"+
 			"Kalo hasil jelek, revert:\n"+
 			"```bash\nmv %s %s\n```",

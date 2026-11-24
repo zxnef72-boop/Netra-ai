@@ -25,7 +25,7 @@ func cmdPWA(args []string) string {
 	// Cari file template
 	templateFile := findTemplateFile(templateName)
 	if templateFile == "" {
-		return fmt.Sprintf("❌ Template '%s' gak ketemu di folder templates/.\n\n%s",
+		return fmt.Sprintf("GAGAL Template '%s' gak ketemu di folder templates/.\n\n%s",
 			templateName, pwaListTemplates())
 	}
 
@@ -60,14 +60,14 @@ func cmdPWA(args []string) string {
 	}
 
 	if err := buildPWA(templateFile, outDir, appName); err != nil {
-		return fmt.Sprintf("❌ Gagal bikin PWA: %v", err)
+		return fmt.Sprintf("GAGAL: bikin PWA: %v", err)
 	}
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("✅ **PWA berhasil dibuat!**\n\n"))
-	sb.WriteString(fmt.Sprintf("📁 Folder: `%s`\n\n", outDir))
+	sb.WriteString(fmt.Sprintf("**PWA berhasil dibuat!**\n\n"))
+	sb.WriteString(fmt.Sprintf("Folder: `%s`\n\n", outDir))
 	if len(mkErrors) > 0 {
-		sb.WriteString("⚠️ **Debug (folder /sdcard gagal):**\n")
+		sb.WriteString("PERINGATAN **Debug (folder /sdcard gagal):**\n")
 		for _, e := range mkErrors {
 			sb.WriteString(fmt.Sprintf("  • `%s`\n", e))
 		}
@@ -83,7 +83,7 @@ func cmdPWA(args []string) string {
 	sb.WriteString("1. Buka Chrome HP → `http://127.0.0.1:8080`\n")
 	sb.WriteString("2. Menu Chrome (⋮) → **Add to Home screen**\n")
 	sb.WriteString("3. Buka dari home screen → jalan kayak app\n\n")
-	sb.WriteString("💡 Hosting lokal cuma buat tes. Kalau mau bisa diakses dari HP lain:\n")
+	sb.WriteString("Hosting lokal cuma buat tes. Kalau mau bisa diakses dari HP lain:\n")
 	sb.WriteString(fmt.Sprintf("   `python3 -m http.server 8080 --bind 0.0.0.0` → akses `http://<IP-HP>:8080`"))
 
 	return sb.String()

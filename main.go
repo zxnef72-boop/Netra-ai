@@ -521,7 +521,7 @@ func (m Model) update0(msg tea.Msg) (tea.Model, tea.Cmd) {
 							m.fileFocus = false
 							m.showFiles = false
 							m.messages = append(m.messages, ChatMsg{Role: "assistant",
-								Text: fmt.Sprintf("🚀 Auto-build: **%s** — tunggu...", fe.Name)})
+								Text: fmt.Sprintf("Auto-build: **%s** — tunggu...", fe.Name)})
 							// Sync build — block TUI sebentar
 							log, err := cmdBuildAPKFromHTML(full, appName, true)
 							if err != nil {
@@ -696,7 +696,7 @@ func (m Model) update0(msg tea.Msg) (tea.Model, tea.Cmd) {
 				sb.WriteString("\n\n")
 				for _, af := range m.attached {
 					lang := langFromPath(af.Name)
-					sb.WriteString(fmt.Sprintf("📎 %s\n```%s\n%s\n```\n\n",
+					sb.WriteString(fmt.Sprintf("%s\n```%s\n%s\n```\n\n",
 						af.Name, lang, strings.TrimRight(af.Content, "\n")))
 					attachNames = append(attachNames, af.Name)
 				}
@@ -856,12 +856,12 @@ func (m *Model) handleSlash(cmd string) {
 				m.KaliChat = 0
 				m.Catatan = make(map[string]string)
 			})
-			m.messages = append(m.messages, ChatMsg{Role: "assistant", Text: "🧹 Memory di-reset."})
+			m.messages = append(m.messages, ChatMsg{Role: "assistant", Text: "Memory di-reset."})
 			return
 		}
 		// Default: tampilin memory
 		mem := loadMemory()
-		txt := "🧠 **Memory Eliza:**\n\n"
+		txt := "**Memory Eliza:**\n\n"
 		txt += fmt.Sprintf("- Nama user: `%s`\n", mem.NamaUser)
 		txt += fmt.Sprintf("- Mood terakhir: `%s`\n", mem.MoodTerakhir)
 		txt += fmt.Sprintf("- Topik terakhir: `%s`\n", mem.TopikTerakhir)
@@ -894,11 +894,11 @@ func (m *Model) handleSlash(cmd string) {
 			return
 		}
 		if err := setPersonality(arg); err != nil {
-			m.messages = append(m.messages, ChatMsg{Role: "assistant", Text: "❌ " + err.Error()})
+			m.messages = append(m.messages, ChatMsg{Role: "assistant", Text: "GAGAL: " + err.Error()})
 			return
 		}
 		if activePersonality == nil {
-			m.messages = append(m.messages, ChatMsg{Role: "assistant", Text: "✅ Personality dimatiin (default)"})
+			m.messages = append(m.messages, ChatMsg{Role: "assistant", Text: "Personality dimatiin (default)"})
 
 			m.streaming = false
 		} else {
@@ -906,7 +906,7 @@ func (m *Model) handleSlash(cmd string) {
 			if g == "" {
 				g = "Halo!"
 			}
-			m.messages = append(m.messages, ChatMsg{Role: "assistant", Text: "✅ Personality: **" + activePersonality.Name + "**\n\n" + g})
+			m.messages = append(m.messages, ChatMsg{Role: "assistant", Text: "Personality: **" + activePersonality.Name + "**\n\n" + g})
 		}
 		return
 	}
@@ -923,7 +923,7 @@ func (m *Model) handleSlash(cmd string) {
 	if cmd == "/build" || strings.HasPrefix(cmd, "/build ") {
 		parts := strings.Fields(strings.TrimPrefix(cmd, "/build"))
 		if len(parts) < 3 {
-			m.messages = append(m.messages, ChatMsg{Role: "assistant", Text: "Pakai: /build <apk|apkfast|html|native|exe|exe-win> <url|@file> <nama-app>"})
+			m.messages = append(m.messages, ChatMsg{Role: "assistant", Text: "Pakai: /build <apk|apkfast|html|native|exe|exe-win|exe-portable> <url|@file> <nama-app>"})
 			return
 		}
 		kind, targetURL, appName := parts[0], parts[1], strings.Join(parts[2:], " ")
@@ -955,6 +955,11 @@ func (m *Model) handleSlash(cmd string) {
 			logStr, err = cmdBuildNativeAPK(targetURL, appName)
 		} else if kind == "exe" {
 			logStr, err = cmdBuildInstallerEXE(targetURL, appName)
+		} else if kind == "exe-portable" || kind == "portable" {
+			if !strings.HasPrefix(targetURL, "/") && !strings.HasPrefix(targetURL, "~/") {
+				targetURL = filepath.Join(m.currentDir, targetURL)
+			}
+			logStr, err = cmdBuildEXEPortable(targetURL, appName)
 		} else if kind == "exe-win" || kind == "win" {
 			logStr, err = cmdBuildWinInstaller(targetURL, appName)
 		}
@@ -1107,7 +1112,7 @@ func (m *Model) handleCd(args []string) {
 		m.showFiles = true
 	}
 	m.fileFocus = true
-	m.messages = append(m.messages, ChatMsg{Role: "assistant", Text: "✓ Pindah ke: " + path})
+	m.messages = append(m.messages, ChatMsg{Role: "assistant", Text: "OK Pindah ke: " + path})
 }
 
 // handleContinue — kirim prompt buat AI lanjutin output yang kepotong.
@@ -1236,7 +1241,7 @@ func (m *Model) handleUnzip(args []string) {
 	}
 	m.fileFocus = true
 	m.messages = append(m.messages, ChatMsg{Role: "assistant",
-		Text: fmt.Sprintf("✓ Extract %d file ke %s", n, targetDir)})
+		Text: fmt.Sprintf("OK Extract %d file ke %s", n, targetDir)})
 }
 
 func (m *Model) handleZip(args []string) {
@@ -1270,7 +1275,7 @@ func (m *Model) handleZip(args []string) {
 	}
 	m.refreshFiles()
 	m.messages = append(m.messages, ChatMsg{Role: "assistant",
-		Text: fmt.Sprintf("✓ %s\n- %d file, original %.2f MB (max 10MB)",
+		Text: fmt.Sprintf("OK %s\n- %d file, original %.2f MB (max 10MB)",
 			filepath.Base(outName), n, float64(total)/(1024*1024))})
 }
 
@@ -1437,7 +1442,7 @@ func (m *Model) handleProject(args []string) {
 		if err != nil {
 			results = append(results, "zip gagal: "+err.Error())
 		} else {
-			note = fmt.Sprintf("\n\n✓ Auto-zip: %s (%d file, %.2f KB)",
+			note = fmt.Sprintf("\n\nOK Auto-zip: %s (%d file, %.2f KB)",
 				filepath.Base(name), n, float64(total)/1024)
 		}
 	}
@@ -1596,7 +1601,7 @@ func (m *Model) handleTemplate(args []string) {
 
 	m.refreshFiles()
 	m.messages = append(m.messages, ChatMsg{Role: "assistant",
-		Text: fmt.Sprintf("✓ Template '%s' disalin ke **%s** (%d byte)\n\nBuka di browser atau edit langsung.", name, outPath, len(data))})
+		Text: fmt.Sprintf("OK Template '%s' disalin ke **%s** (%d byte)\n\nBuka di browser atau edit langsung.", name, outPath, len(data))})
 }
 
 func (m *Model) handleBlocks() {
@@ -1635,9 +1640,9 @@ func (m *Model) handleCopy(args []string) {
 	}
 	var note string
 	if len(blocks) == 1 {
-		note = fmt.Sprintf("✓ Code block (%d karakter) udah di clipboard.", len(chosen))
+		note = fmt.Sprintf("OK Code block (%d karakter) udah di clipboard.", len(chosen))
 	} else {
-		note = fmt.Sprintf("✓ Code block #%d dari %d (%d karakter) udah di clipboard.", idx+1, len(blocks), len(chosen))
+		note = fmt.Sprintf("OK Code block #%d dari %d (%d karakter) udah di clipboard.", idx+1, len(blocks), len(chosen))
 	}
 	m.messages = append(m.messages, ChatMsg{Role: "assistant", Text: note})
 }
@@ -1686,7 +1691,7 @@ func (m *Model) handleSave(args []string) {
 		return
 	}
 	m.messages = append(m.messages, ChatMsg{Role: "assistant",
-		Text: fmt.Sprintf("✓ Disimpan: **%s** (%d byte)%s", path, len(chosen), backupNote)})
+		Text: fmt.Sprintf("OK Disimpan: **%s** (%d byte)%s", path, len(chosen), backupNote)})
 	m.refreshFiles()
 }
 
@@ -1738,7 +1743,7 @@ func (m *Model) handleSaveAll(args []string) {
 		if err != nil {
 			saved = append(saved, fmt.Sprintf("zip gagal: %v", err))
 		} else {
-			note = fmt.Sprintf("\n\n✓ Auto-zip: %s (%d file, %.2f MB)",
+			note = fmt.Sprintf("\n\nOK Auto-zip: %s (%d file, %.2f MB)",
 				filepath.Base(zipOutPath), n, float64(total)/(1024*1024))
 		}
 	}
@@ -2278,7 +2283,7 @@ func (m Model) renderChatPane(w, h int) string {
 				if info, err := os.Stat(name); err == nil {
 					sizeStr = fmt.Sprintf(" (%.1f KB)", float64(info.Size())/1024)
 				}
-				lines = append(lines, "    "+lipgloss.NewStyle().Foreground(lipgloss.Color("#7aa2f7")).Render("📎 "+name)+
+				lines = append(lines, "    "+lipgloss.NewStyle().Foreground(lipgloss.Color("#7aa2f7")).Render(""+name)+
 					lipgloss.NewStyle().Foreground(lipgloss.Color("#565f89")).Render(sizeStr))
 			}
 			lines = append(lines, "")

@@ -280,7 +280,7 @@ func tryGitHubSearch(input string) (string, bool) {
 		if len(desc) > 200 {
 			desc = desc[:200] + "..."
 		}
-		b.WriteString(fmt.Sprintf("**%d. %s** ⭐ %d\n", i+1, item.FullName, item.Stars))
+		b.WriteString(fmt.Sprintf("**%d. %s** stars: %d\n", i+1, item.FullName, item.Stars))
 		b.WriteString(fmt.Sprintf("  Owner: `%s`", item.Owner.Login))
 		if item.Language != "" {
 			b.WriteString(fmt.Sprintf(" | Bahasa: %s", item.Language))

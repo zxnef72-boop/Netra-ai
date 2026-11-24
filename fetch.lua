@@ -6,7 +6,7 @@ local url = args[1]
 print("Fetch: " .. url)
 local body, status = http_get(url)
 if status == 0 then
-    print("✗ Gagal konek")
+    print("GAGAL: konek")
 else
     print("Status: " .. status)
     print("Size: " .. #body .. " byte")
