@@ -956,10 +956,17 @@ func (m *Model) handleSlash(cmd string) {
 		} else if kind == "exe" {
 			logStr, err = cmdBuildInstallerEXE(targetURL, appName)
 		} else if kind == "exe-portable" || kind == "portable" {
+			var iconPath string
+			for _, tok := range strings.Fields(appName) {
+				if strings.HasPrefix(strings.ToLower(tok), "--icon=") {
+					iconPath = tok[7:]
+					appName = strings.TrimSpace(strings.ReplaceAll(appName, tok, ""))
+				}
+			}
 			if !strings.HasPrefix(targetURL, "/") && !strings.HasPrefix(targetURL, "~/") {
 				targetURL = filepath.Join(m.currentDir, targetURL)
 			}
-			logStr, err = cmdBuildEXEPortable(targetURL, appName)
+			logStr, err = cmdBuildEXEPortable(targetURL, appName, iconPath)
 		} else if kind == "exe-win" || kind == "win" {
 			logStr, err = cmdBuildWinInstaller(targetURL, appName)
 		}

@@ -101,7 +101,7 @@ func main() {
 
 // cmdBuildEXEPortable — folder HTML jadi satu EXE Windows mandiri.
 // Pakai: /build exe-portable <folder> <nama-app>
-func cmdBuildEXEPortable(htmlFolder, appName string) (string, error) {
+func cmdBuildEXEPortable(htmlFolder, appName, iconPath string) (string, error) {
 	var log strings.Builder
 
 	if strings.HasPrefix(htmlFolder, "~/") {
@@ -112,22 +112,28 @@ func cmdBuildEXEPortable(htmlFolder, appName string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("path gak ketemu: %s", htmlFolder)
 	}
-	if !info.IsDir() {
-		return "", fmt.Errorf("harus folder, bukan file: %s", htmlFolder)
-	}
-
-	indexPath := filepath.Join(htmlFolder, "index.html")
-	if _, err := os.Stat(indexPath); err != nil {
-		indexPath = ""
-		items, _ := os.ReadDir(htmlFolder)
-		for _, e := range items {
-			if !e.IsDir() && strings.HasSuffix(strings.ToLower(e.Name()), ".html") {
-				indexPath = filepath.Join(htmlFolder, e.Name())
-				break
-			}
+	var indexPath string
+	singleFile := !info.IsDir()
+	if singleFile {
+		lower := strings.ToLower(info.Name())
+		if !strings.HasSuffix(lower, ".html") && !strings.HasSuffix(lower, ".htm") {
+			return "", fmt.Errorf("harus folder atau file .html/.htm: %s", htmlFolder)
 		}
-		if indexPath == "" {
-			return "", fmt.Errorf("gak ada .html di %s", htmlFolder)
+		indexPath = htmlFolder
+	} else {
+		indexPath = filepath.Join(htmlFolder, "index.html")
+		if _, err := os.Stat(indexPath); err != nil {
+			indexPath = ""
+			items, _ := os.ReadDir(htmlFolder)
+			for _, e := range items {
+				if !e.IsDir() && strings.HasSuffix(strings.ToLower(e.Name()), ".html") {
+					indexPath = filepath.Join(htmlFolder, e.Name())
+					break
+				}
+			}
+			if indexPath == "" {
+				return "", fmt.Errorf("gak ada .html di %s", htmlFolder)
+			}
 		}
 	}
 	if _, err := exec.LookPath("go"); err != nil {
@@ -148,28 +154,59 @@ func cmdBuildEXEPortable(htmlFolder, appName string) (string, error) {
 	}
 
 	log.WriteString(fmt.Sprintf("**Building EXE mandiri: %s**\n\n", appName))
-	log.WriteString(fmt.Sprintf("Folder : `%s`\n", htmlFolder))
+	log.WriteString(fmt.Sprintf("Sumber : `%s`\n", htmlFolder))
 	log.WriteString(fmt.Sprintf("WorkDir: `%s`\n\n", workDir))
 
 	data, err := os.ReadFile(indexPath)
 	if err != nil {
 		return log.String(), err
 	}
+	if iconPath != "" {
+		if strings.HasPrefix(iconPath, "~/") {
+			if home, err := os.UserHomeDir(); err == nil {
+				iconPath = filepath.Join(home, iconPath[2:])
+			}
+		} else if !filepath.IsAbs(iconPath) {
+			iconPath = filepath.Join(filepath.Dir(indexPath), iconPath)
+		}
+		if iconData, err := os.ReadFile(iconPath); err == nil {
+			ext := strings.ToLower(filepath.Ext(iconPath))
+			if ext == "" {
+				ext = ".png"
+			}
+			iconFile := "icon" + ext
+			if err := os.WriteFile(filepath.Join(payloadDir, iconFile), iconData, 0644); err == nil {
+				htmlStr := string(data)
+				linkTag := `<link rel="icon" href="` + iconFile + `">`
+				if idx := strings.Index(strings.ToLower(htmlStr), "</title>"); idx != -1 {
+					endIdx := idx + len("</title>")
+					data = []byte(htmlStr[:endIdx] + linkTag + htmlStr[endIdx:])
+				} else if hIdx := strings.Index(strings.ToLower(htmlStr), "<head"); hIdx != -1 {
+					if gt := strings.Index(htmlStr[hIdx:], ">"); gt != -1 {
+						pos := hIdx + gt + 1
+						data = []byte(htmlStr[:pos] + linkTag + htmlStr[pos:])
+					}
+				}
+			}
+		}
+	}
 	if err := os.WriteFile(filepath.Join(payloadDir, "index.html"), data, 0644); err != nil {
 		return log.String(), err
 	}
-	items, _ := os.ReadDir(htmlFolder)
-	for _, e := range items {
-		name := e.Name()
-		if name == "index.html" || name == "index.htm" {
-			continue
-		}
-		src := filepath.Join(htmlFolder, name)
-		dst := filepath.Join(payloadDir, name)
-		if e.IsDir() {
-			copyDir(src, dst)
-		} else {
-			copyFile(src, dst)
+	if !singleFile {
+		items, _ := os.ReadDir(htmlFolder)
+		for _, e := range items {
+			name := e.Name()
+			if filepath.Join(htmlFolder, name) == indexPath {
+				continue
+			}
+			src := filepath.Join(htmlFolder, name)
+			dst := filepath.Join(payloadDir, name)
+			if e.IsDir() {
+				copyDir(src, dst)
+			} else {
+				copyFile(src, dst)
+			}
 		}
 	}
 	log.WriteString("  `→` payload     OK\n")
