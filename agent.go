@@ -174,6 +174,9 @@ func agentExecTool(name string, args map[string]interface{}, cwd string) string 
 		if !filepath.IsAbs(path) {
 			path = filepath.Join(cwd, path)
 		}
+		if old, errOld := os.ReadFile(path); errOld == nil && bytes.Equal(old, []byte(content)) {
+			return fmt.Sprintf("OK: file ditulis %s (%d byte) - isi identik dengan versi di disk, tidak ada perubahan", path, len(content))
+		}
 		os.MkdirAll(filepath.Dir(path), 0755)
 		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
 			return fmt.Sprintf("[error tulis file: %v]", err)
@@ -286,7 +289,7 @@ func cmdAgentRun(userPrompt string, cwd string, provider Provider) (string, erro
 		{Role: "user", Content: userPrompt},
 	}
 
-	client := &http.Client{Timeout: 3 * time.Minute}
+	client := &http.Client{Timeout: 8 * time.Minute}
 	maxSteps := 8
 
 	// Loop detection: simpen signature tool call terakhir
@@ -294,7 +297,7 @@ func cmdAgentRun(userPrompt string, cwd string, provider Provider) (string, erro
 	repeatCount := 0
 
 	for step := 1; step <= maxSteps; step++ {
-		agentEmit("think", "", fmt.Sprintf("model mikir (langkah %d)", step), "")
+		agentEmit("think", "", fmt.Sprintf("model mikir (langkah %d) [%s/%s]", step, provider.Name, provider.Model), "")
 		reqBody := map[string]interface{}{
 			"model":       provider.Model,
 			"messages":    messages,
