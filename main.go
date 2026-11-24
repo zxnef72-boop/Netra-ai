@@ -298,8 +298,13 @@ func (m Model) update0(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.activeIdx = next
 					m.provider = m.allProviders[m.activeIdx]
 					if cfg, err := loadConfig(); err == nil {
-						cfg.ActiveProvider = next
-						cfg.Providers = m.allProviders
+						cfg.ActiveProvider = -1
+						for i, cp := range cfg.Providers {
+							if cp.Name == m.provider.Name {
+								cfg.ActiveProvider = i
+								break
+							}
+						}
 						cfg.Save()
 					}
 					m.messages = append(m.messages, ChatMsg{Role: "assistant",
