@@ -959,7 +959,7 @@ func (m *Model) handleSlash(cmd string) {
 		} else if kind == "native" {
 			logStr, err = cmdBuildNativeAPK(targetURL, appName)
 		} else if kind == "exe" {
-			logStr, err = cmdBuildInstallerEXE(targetURL, appName)
+			logStr, err = cmdBuildWinInstaller(targetURL, appName)
 		} else if kind == "exe-portable" || kind == "portable" {
 			var iconPath string
 			for _, tok := range strings.Fields(appName) {

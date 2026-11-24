@@ -1,23 +1,73 @@
 -- z_brain.lua -- otak chatbot offline Netra (tanpa AI online).
 -- Jalan otomatis di mode Eliza: tiap pesan user lewat sini dulu.
--- Cara kerja: tiap intent punya pola + bobot, intent dengan skor tertinggi menang.
+-- Cara kerja: normalisasi teks -> intent + bobot + konteks -> refleksi / fallback.
 -- Ingatan (nama, topik, intent terakhir) disimpan lewat state_get/state_set.
 -- Edit tabel INTENTS di bawah untuk ngubah karakter bot, lalu /lua-rules-reload.
 
--- ===== util =====
-local text = " " .. (input_lower or ""):gsub("[%p]", " "):gsub("%s+", " ") .. " "
+-- ===== normalisasi & util =====
+local SLANG_MAP = {
+  ["knp"] = "kenapa",
+  ["napa"] = "kenapa",
+  ["gmn"] = "gimana",
+  ["gmna"] = "gimana",
+  ["bgmn"] = "bagaimana",
+  ["bgt"] = "banget",
+  ["bngt"] = "banget",
+  ["gw"] = "aku",
+  ["gue"] = "aku",
+  ["ane"] = "aku",
+  ["sy"] = "saya",
+  ["lu"] = "kamu",
+  ["lo"] = "kamu",
+  ["lho"] = "loh",
+  ["yg"] = "yang",
+  ["dgn"] = "dengan",
+  ["dg"] = "dengan",
+  ["tdk"] = "tidak",
+  ["ga"] = "nggak",
+  ["gak"] = "nggak",
+  ["gk"] = "nggak",
+  ["engga"] = "nggak",
+  ["msh"] = "masih",
+  ["udh"] = "udah",
+  ["sdh"] = "sudah",
+  ["blm"] = "belum",
+  ["bkn"] = "bukan",
+  ["jgn"] = "jangan",
+  ["bikin"] = "buat",
+  ["nyoba"] = "coba",
+  ["ngecek"] = "cek",
+  ["makasih"] = "terima kasih",
+  ["thx"] = "terima kasih",
+  ["tengkyu"] = "terima kasih",
+  ["cape"] = "capek",
+  ["bosen"] = "bosan",
+  ["seneng"] = "senang",
+  ["kesel"] = "kesal",
+  ["pake"] = "pakai",
+  ["aja"] = "saja",
+}
+
+local function normalize_words(s)
+  local cleaned = (" " .. (s or ""):lower():gsub("[%p]", " "):gsub("%s+", " ") .. " ")
+  local out = {}
+  for w in cleaned:gmatch("%S+") do
+    out[#out + 1] = SLANG_MAP[w] or w
+  end
+  return " " .. table.concat(out, " ") .. " "
+end
+
+local text = normalize_words(input_lower)
 
 local function has(word)
-  return text:find(" " .. word .. " ", 1, true) ~= nil
+  local norm_w = normalize_words(word):match("^%s*(.-)%s*$")
+  if norm_w == "" then return false end
+  return text:find(" " .. norm_w .. " ", 1, true) ~= nil
 end
 
 local function has_any(list)
   for _, w in ipairs(list) do
-    if w:find(" ", 1, true) then
-      if text:find(w, 1, true) then return true end
-    elseif has(w) then
-      return true
-    end
+    if has(w) then return true end
   end
   return false
 end
@@ -38,11 +88,12 @@ local function reflect(s)
   local map = {
     aku = "kamu", saya = "kamu", gue = "kamu", gw = "kamu",
     punyaku = "punyamu", milikku = "milikmu", ku = "mu",
-    kamu = "aku", anda = "aku",
+    kamu = "aku", anda = "aku", punyamu = "punyaku", milikmu = "milikku",
   }
   local out = {}
   for w in s:gmatch("%S+") do
-    out[#out + 1] = map[w:lower()] or w
+    local lw = w:lower()
+    out[#out + 1] = map[lw] or w
   end
   return table.concat(out, " ")
 end
@@ -55,8 +106,8 @@ local SKIP_PREFIX = {
 }
 
 local function should_skip()
-  local raw = input_lower or ""
-  if raw:match("^%s*$") then return true end
+  local raw = (input_lower or ""):gsub("^%s+", "")
+  if raw == "" then return true end
   if raw:find("http", 1, true) or raw:find("www.", 1, true) then return true end
   for _, p in ipairs(SKIP_PREFIX) do
     if raw:sub(1, #p) == p then return true end
@@ -65,7 +116,6 @@ local function should_skip()
 end
 
 -- ===== intent =====
--- pola: kata utuh (cocok per kata) atau frasa (ada spasi). bobot makin besar makin kuat.
 local INTENTS = {
   salam = {
     words = { "halo", "hai", "hi", "hello", "hey", "pagi", "siang", "sore", "malam", "assalamualaikum", "permisi" },
@@ -80,7 +130,7 @@ local INTENTS = {
     weight = 3,
   },
   terima_kasih = {
-    words = { "makasih", "terima kasih", "thanks", "thx", "tengkyu" },
+    words = { "terima kasih", "thanks" },
     weight = 3,
   },
   siapa_kamu = {
@@ -97,7 +147,8 @@ local INTENTS = {
   },
   coding = {
     words = { "error", "bug", "kode", "coding", "program", "script", "golang", "python", "lua", "javascript",
-              "html", "css", "compile", "build", "crash", "git", "termux", "apk", "fungsi", "variabel", "syntax" },
+              "html", "css", "compile", "build", "crash", "git", "termux", "apk", "fungsi", "variabel", "syntax",
+              "shortcut", "icon", "installer" },
     weight = 2,
   },
   sedih = {
@@ -105,15 +156,15 @@ local INTENTS = {
     weight = 3,
   },
   capek = {
-    words = { "capek", "lelah", "cape", "ngantuk", "burnout", "penat", "jenuh", "bosan", "bosen", "stres", "stress", "pusing" },
+    words = { "capek", "lelah", "ngantuk", "burnout", "penat", "jenuh", "bosan", "stres", "stress", "pusing" },
     weight = 3,
   },
   senang = {
-    words = { "senang", "seneng", "bahagia", "asik", "mantap", "berhasil", "lancar", "sukses", "yeay" },
+    words = { "senang", "bahagia", "asik", "mantap", "berhasil", "lancar", "sukses", "yeay" },
     weight = 2,
   },
   marah = {
-    words = { "marah", "kesal", "kesel", "emosi", "jengkel", "benci", "sebel" },
+    words = { "marah", "kesal", "emosi", "jengkel", "benci", "sebel" },
     weight = 3,
   },
   takut = {
@@ -125,11 +176,11 @@ local INTENTS = {
     weight = 4,
   },
   setuju = {
-    words = { "iya", "ya", "yup", "betul", "benar", "oke", "ok", "siap", "boleh", "mau" },
+    words = { "iya", "ya", "yup", "betul", "benar", "oke", "ok", "siap", "boleh", "mau", "lanjut" },
     weight = 1, only_short = true,
   },
   tidak = {
-    words = { "tidak", "nggak", "gak", "ga", "enggak", "belum", "bukan", "jangan" },
+    words = { "tidak", "nggak", "enggak", "belum", "bukan", "jangan" },
     weight = 1, only_short = true,
   },
 }
@@ -147,7 +198,7 @@ local function best_intent()
     local score = 0
     if not (it.only_short and n > 3) then
       for _, w in ipairs(it.words) do
-        if has_any({ w }) then score = score + it.weight end
+        if has(w) then score = score + it.weight end
       end
     end
     if score > best_score or (score == best_score and score > 0 and name < (best or "~")) then
@@ -164,6 +215,13 @@ R.salam = function(c)
   local nama = state_get("nama")
   local g = (c and c.greeting) or "hari"
   local sapa = nama ~= "" and (" " .. nama) or ""
+  local prev = state_get("last_intent")
+  if prev == "salam" then
+    return pick("salam_ulang", {
+      "Masih di sini" .. sapa .. ". Ada yang lagi kamu kerjain?",
+      "Halo lagi" .. sapa .. ". Mau lanjut bahas apa?",
+    })
+  end
   return pick("salam", {
     "Halo" .. sapa .. ". Ada yang bisa dibantu?",
     "Selamat " .. g .. sapa .. ". Lagi ngerjain apa?",
@@ -180,11 +238,20 @@ end
 
 R.pamit = function()
   state_set("topic", "")
-  return pick("pamit", { "Sampai jumpa. Lanjut kapan saja.", "Oke, hati-hati. Kabari lagi kalau butuh.", "Siap. Sampai nanti." })
+  state_set("last_intent", "")
+  return pick("pamit", {
+    "Sampai jumpa. Lanjut kapan saja.",
+    "Oke, hati-hati. Kabari lagi kalau butuh.",
+    "Siap. Sampai nanti.",
+  })
 end
 
 R.terima_kasih = function()
-  return pick("tk", { "Sama-sama.", "Sama-sama, senang bisa bantu.", "Siap. Ada lagi yang perlu dibantu?" })
+  return pick("tk", {
+    "Sama-sama.",
+    "Sama-sama, senang bisa bantu.",
+    "Siap. Ada lagi yang perlu dibantu?",
+  })
 end
 
 R.siapa_kamu = function()
@@ -192,7 +259,7 @@ R.siapa_kamu = function()
 end
 
 R.bisa_apa = function()
-  return "Aku bisa ngobrol santai, bantu cari arah waktu ada masalah coding (error, build, Termux), dan nemenin kalau kamu lagi capek atau stres. Untuk tutorial dan pencarian, tulis misalnya: cara bikin apk, atau apa itu golang."
+  return "Aku bisa ngobrol santai, bantu cari arah waktu ada masalah coding (error, build, shortcut/icon, Termux), dan nemenin kalau kamu lagi capek atau stres. Untuk tutorial dan pencarian, tulis misalnya: cara bikin apk, atau apa itu golang."
 end
 
 R.minta_bantuan = function()
@@ -211,7 +278,7 @@ R.coding = function()
     return "Soal error itu: coba baca baris pertama pesannya, biasanya menunjuk file dan nomor baris. Error-nya muncul di langkah mana, saat build atau saat dijalankan?"
   end
   return pick("coding", {
-    "Soal coding ya. Pakai bahasa apa, dan bagian mana yang bikin mentok?",
+    "Soal coding ya. Pakai bahasa atau stack apa, dan bagian mana yang bikin mentok?",
     "Oke. Tempel potongan kode atau pesan error-nya, biar lebih jelas.",
     "Kamu lagi ngerjain apa persisnya, dan hasil yang diharapkan seperti apa?",
   })
@@ -234,7 +301,10 @@ R.capek = function()
 end
 
 R.senang = function()
-  return pick("senang", { "Bagus. Apa yang bikin kamu senang?", "Ikut senang dengarnya. Ceritain dong." })
+  return pick("senang", {
+    "Bagus. Apa yang bikin kamu senang?",
+    "Ikut senang dengarnya. Ceritain dong.",
+  })
 end
 
 R.marah = function()
@@ -260,7 +330,7 @@ end
 R.setuju = function()
   local t = state_get("topic")
   if t == "coding" or t == "bantuan" then
-    return "Oke. Lanjut, kasih detailnya: kode atau pesan error yang dihadapi?"
+    return "Oke. Lanjut, kasih detailnya: kode, langkah, atau pesan error yang dihadapi?"
   elseif t == "perasaan" then
     return "Aku dengerin. Lanjutkan saja ceritanya."
   end
@@ -281,7 +351,18 @@ local function try_name()
   local n = raw:match("[Nn]ama%s+[Aa]ku%s+(%a+)")
     or raw:match("[Nn]amaku%s+(%a+)")
     or raw:match("[Pp]anggil%s+[Aa]ku%s+(%a+)")
-  if n then return n:sub(1, 1):upper() .. n:sub(2):lower() end
+    or raw:match("[Pp]anggil%s+aja%s+(%a+)")
+    or raw:match("[Aa]ku%s+(%a+)%s+nih")
+  if n then
+    local lower_n = n:lower()
+    local forbidden = {
+      lagi = true, sedang = true, mau = true, capek = true, sedih = true,
+      senang = true, bingung = true, kerja = true, ngerjain = true, coba = true,
+    }
+    if not forbidden[lower_n] then
+      return n:sub(1, 1):upper() .. n:sub(2):lower()
+    end
+  end
   return nil
 end
 
@@ -291,6 +372,7 @@ local function try_reflect()
     or raw:match("[Aa]ku%s+lagi%s+(.+)")
     or raw:match("[Aa]ku%s+sedang%s+(.+)")
     or raw:match("[Aa]ku%s+nggak%s+bisa%s+(.+)")
+    or raw:match("[Aa]ku%s+gak%s+bisa%s+(.+)")
   if s and #s > 2 then
     s = reflect(s:gsub("[%.%!%?]+%s*$", ""))
     return s
@@ -336,8 +418,9 @@ function reply(inp, c)
 
   -- 4. fallback: nyambung ke topik terakhir, bukan jawaban acak
   local t = state_get("topic")
-  if t == "coding" then
-    return "Boleh dijelasin lebih detail? Bagian kode atau error yang mana?"
+  local last_i = state_get("last_intent")
+  if t == "coding" or last_i == "coding" then
+    return "Boleh dijelasin lebih detail? Bagian kode, langkah build, atau error yang mana?"
   elseif t == "perasaan" then
     return "Lanjutkan saja, aku dengerin."
   end

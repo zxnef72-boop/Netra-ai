@@ -165,30 +165,71 @@ func main() {
 
         psScript := fmt.Sprintf(` + "`" + `
 $WshShell = New-Object -ComObject WScript.Shell
+$ico = Get-ChildItem -Path '%s' -Filter *.ico -ErrorAction SilentlyContinue | Select-Object -First 1
 $Desktop = $WshShell.CreateShortcut('%s\%s.lnk')
 $Desktop.TargetPath = '%s'
 $Desktop.WorkingDirectory = '%s'
+if ($ico) { $Desktop.IconLocation = "$($ico.FullName),0" }
 $Desktop.Save()
 $Start = $WshShell.CreateShortcut('%s\%s.lnk')
 $Start.TargetPath = '%s'
 $Start.WorkingDirectory = '%s'
+if ($ico) { $Start.IconLocation = "$($ico.FullName),0" }
 $Start.Save()
-` + "`" + `, desktop, AppName, exePath, installDir, startMenu, AppName, exePath, installDir)
+` + "`" + `, installDir, desktop, AppName, exePath, installDir, startMenu, AppName, exePath, installDir)
 
-        cmd := exec.Command("powershell", "-NoProfile", "-Command", psScript)
+        cmd := exec.Command("powershell", "-NoProfile", "-WindowStyle", "Hidden", "-Command", psScript)
+        cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
         _ = cmd.Run()
 
-        // 4. Registry entry buat Control Panel (uninstall)
-        regBase := fmt.Sprintf(` + "`" + `HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\%s` + "`" + `, AppName)
-        regEntries := [][]string{
-                {"DisplayName", AppName},
-                {"DisplayVersion", "1.0"},
-                {"Publisher", "NetRa"},
-                {"InstallLocation", installDir},
-                {"UninstallString", fmt.Sprintf(` + "`" + `"%s"` + "`" + `, uninstallPath)},
-        }
-        for _, e := range regEntries {
-                exec.Command("reg", "add", regBase, "/v", e[0], "/t", "REG_SZ", "/d", e[1], "/f").Run()
+        // 4. Registry entry buat Control Panel (uninstall) langsung via advapi32.dll (tanpa reg.exe)
+        advapi32 := syscall.NewLazyDLL("advapi32.dll")
+        procRegCreateKeyExW := advapi32.NewProc("RegCreateKeyExW")
+        procRegSetValueExW := advapi32.NewProc("RegSetValueExW")
+        procRegCloseKey := advapi32.NewProc("RegCloseKey")
+
+        const (
+                hkeyCurrentUser uintptr = 0x80000001
+                keySetValue     uint32  = 0x0002
+                regSz           uint32  = 1
+        )
+        subKey := fmt.Sprintf("Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\%s", AppName)
+        subKeyPtr, _ := syscall.UTF16PtrFromString(subKey)
+        var hKey syscall.Handle
+        var disp uint32
+        rc, _, _ := procRegCreateKeyExW.Call(
+                hkeyCurrentUser,
+                uintptr(unsafe.Pointer(subKeyPtr)),
+                0,
+                0,
+                0,
+                uintptr(keySetValue),
+                0,
+                uintptr(unsafe.Pointer(&hKey)),
+                uintptr(unsafe.Pointer(&disp)),
+        )
+        if rc == 0 {
+                regEntries := [][]string{
+                        {"DisplayName", AppName},
+                        {"DisplayVersion", "1.0"},
+                        {"Publisher", "NetRa"},
+                        {"InstallLocation", installDir},
+                        {"UninstallString", fmt.Sprintf(` + "`" + `"%s"` + "`" + `, uninstallPath)},
+                }
+                for _, e := range regEntries {
+                        valNamePtr, _ := syscall.UTF16PtrFromString(e[0])
+                        u16, _ := syscall.UTF16FromString(e[1])
+                        byteLen := uint32(len(u16) * 2)
+                        procRegSetValueExW.Call(
+                                uintptr(hKey),
+                                uintptr(unsafe.Pointer(valNamePtr)),
+                                0,
+                                uintptr(regSz),
+                                uintptr(unsafe.Pointer(&u16[0])),
+                                uintptr(byteLen),
+                        )
+                }
+                procRegCloseKey.Call(uintptr(hKey))
         }
 
         // 5. Jalanin app
@@ -239,9 +280,16 @@ func cmdBuildWinInstaller(htmlFolder, appName string) (string, error) {
 	safeName := sanitizeName(appName)
 	viewerExe := safeName + ".exe"
 
-	// Workdir di /sdcard (accessible)
-	workDir := fmt.Sprintf("/sdcard/AiNef/win-installer-build/%s_%d", safeName, time.Now().Unix())
-	outDir := "/sdcard/AiNef/exe-output"
+	var buildBase, outDir string
+	if _, err := os.Stat("/sdcard"); err == nil {
+		buildBase = "/sdcard/AiNef/win-installer-build"
+		outDir = "/sdcard/AiNef/exe-output"
+	} else {
+		home, _ := os.UserHomeDir()
+		buildBase = filepath.Join(home, "netra-ai", "win-installer-build")
+		outDir = filepath.Join(home, "netra-ai", "exe-output")
+	}
+	workDir := filepath.Join(buildBase, fmt.Sprintf("%s_%d", safeName, time.Now().Unix()))
 
 	os.MkdirAll(workDir, 0755)
 	os.MkdirAll(outDir, 0755)
