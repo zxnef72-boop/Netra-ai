@@ -520,7 +520,7 @@ func (m Model) ocChat(w, h int) string {
 				lines = append(lines, m.ocAgentChecklist(textW)...)
 			} else if !anyContent && streamingThis {
 				spin := lipgloss.NewStyle().Foreground(ocLerp("#bb9af7", "#7aa2f7", ocBreath(m.frame, 28))).Render(ocSpin(m.frame))
-				lines = append(lines, "   "+spin+" "+ocShimmer("berpikir", m.frame, "")+styleDim.Render(ocDots(m.frame)))
+				lines = append(lines, "   "+spin+" "+ocShimmer(func() string { if m.agentPhase != "" { return m.agentPhase }; return "berpikir" }(), m.frame, "")+styleDim.Render(ocDots(m.frame)))
 			} else if anyContent && streamingThis {
 				// kursor kedip di ujung teks yang lagi diketik
 				i := len(lines) - 1

@@ -682,6 +682,9 @@ func (m Model) update0(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.handleSlash(text)
 				m.input = ""
 				m.inputCursor = 0
+				if strings.HasPrefix(text, "/agent ") && m.streaming && m.streamCh != nil {
+					return m, waitForChunk(m.streamCh)
+				}
 				return m, nil
 			}
 			// Prepend attachment kalo ada
