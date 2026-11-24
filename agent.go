@@ -87,8 +87,8 @@ func agentToolList() []agentToolDef {
 // agentAllowWrite — false secara default. Harus di-set true eksplisit.
 var agentAllowWrite = false
 
-// agentWorkspace — folder yang boleh diakses agent. Default /sdcard/AiNef.
-var agentWorkspace = "/sdcard/AiNef"
+// agentWorkspace — folder yang boleh diakses agent. Termux: /sdcard/AiNef, lainnya: ~/netra-projects (override env NETRA_WORKSPACE).
+var agentWorkspace = defaultAgentWorkspace()
 
 // agentPathAllowed — cek apakah path diizinkan (dalam workspace).
 func agentPathAllowed(path string) bool {

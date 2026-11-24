@@ -29,6 +29,9 @@ func (m *Model) handleAgent(args []string) {
 	m.streamCh = ch
 
 	cwd := m.currentDir
+	if !agentPathAllowed(cwd) {
+		cwd = agentWorkspace
+	}
 	provider := m.provider
 
 	go func() {
