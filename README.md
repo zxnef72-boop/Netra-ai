@@ -14,6 +14,7 @@ Builder:
 - /build native <data.json> <nama>
 - /build exe <folder> <nama>
 - /build exe-win <folder> <nama>
+- /build exe-portable <folder> <nama> (alias: /build portable)
 
 OSINT:
 - /apkscan <file.apk>
@@ -25,7 +26,7 @@ OSINT:
 AI:
 - Eliza mode (offline, tanpa API)
 - Plugin system Lua (natural language)
-- Multi-provider (Gemini, Groq, OpenRouter, Ollama)
+- Multi-provider (Groq, OpenRouter, Ollama). Eliza mode offline tersedia tanpa API.
 
 TUI:
 - File manager (Ctrl+B)
@@ -39,8 +40,12 @@ Agent yang bisa baca, tulis, list, dan jalanin command sendiri. Loop sampai sele
 - `/agent <prompt>` — jalanin agent
 - `/agent-unsafe on` — izinin write + run command
 - Tools: read_file, write_file, list_dir, run_command
-- Progres live: tiap langkah tampil sebagai checklist (spinner jalan, centang ok, silang gagal + alasan)
-- Safety: path restriction /sdcard/AiNef, loop detection max 8 step, output 5-8KB
+- Progres live: tiap langkah tampil sebagai checklist (spinner jalan, label OK atau GAGAL dengan detail)
+- Safety: workspace agent mengikuti platform - Termux /sdcard/AiNef, lainnya ~/netra-projects (override env NETRA_WORKSPACE)
+- cwd agent: kalau currentDir di luar workspace, otomatis jatuh ke workspace
+- Retry 429: baca header Retry-After atau teks "try again in ...", tunggu maksimal 45 detik, maksimal 2 percobaan
+- Penjaga tulis ulang: write_file dengan isi identik versi disk dibalas OK tanpa tulis ulang
+- Output per tool call dibatasi 5-8KB
 
 Butuh provider OpenAI-compatible (Groq, OpenRouter, Ollama). Belum support Gemini.
 
@@ -50,6 +55,14 @@ Butuh provider OpenAI-compatible (Groq, OpenRouter, Ollama). Belum support Gemin
 Pakai template `base.apk` yang ditanam di binary: file masuk ke `assets/www/`, lalu tanda tangan ulang (pure Go).
 Template (kode Java-nya) ada di `template-src/`, dibuild ulang sekali pakai `build_template.sh`.
 Tombol "Pilih file" di halaman web didukung; "Pilih folder" (showDirectoryPicker/webkitdirectory) belum, WebView Android tidak mendukung.
+
+### Build EXE Portable (self-extract)
+
+`/build exe-portable <folder> <nama>` (atau `/build portable`) bikin satu .exe Windows mandiri dari folder HTML, tanpa installer dan tanpa MinGW atau makensis.
+Satu `go build` dengan `GOOS=windows CGO_ENABLED=0` menghasilkan satu .exe yang membawa HTML lewat `go:embed`.
+Saat dijalankan di Windows, .exe mengekstrak payload ke `%TEMP%\netra-<nama>-<id>` lalu membuka `index.html` lewat Edge atau Chrome app mode.
+Output: `~/netra-projects/exe-output/<nama>.exe` (atau `NETRA_WORKSPACE/exe-output`).
+Butuh Edge atau Chrome terpasang di PC. WebView2 belum dikerjakan.
 
 ### HTML Toolkit
 
@@ -135,6 +148,7 @@ Isi API key di config.json. Provider yang didukung:
     check crypto btc
     harga ethereum
     /build html ~/project MyApp --fullscreen
+    /build exe-portable ~/project MyApp
     /sandbox nmap -F 192.168.1.1
     /baca fotosintesis id.wikipedia.org
 
