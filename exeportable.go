@@ -90,6 +90,7 @@ func main() {
 	}
 	for _, ep := range candidates {
 		if err := exec.Command(ep, "--app="+target, "--window-size=1200,800").Start(); err == nil {
+			taskbarIdentity(filepath.Join(dir, "index.html"))
 			return
 		}
 	}
@@ -223,6 +224,7 @@ func cmdBuildEXEPortable(htmlFolder, appName, iconPath string) (string, error) {
 		return log.String(), err
 	}
 	log.WriteString("  `→` stub        OK\n")
+	writeTaskbarHelper(workDir, appName, safeName)
 	if err := embedIconFor(appName, workDir, iconPath); err != nil {
 		log.WriteString("  `→` ikon        dilewati: " + err.Error() + "\n")
 	} else {

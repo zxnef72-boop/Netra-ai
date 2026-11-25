@@ -356,6 +356,7 @@ func main() {
 
 	for _, ep := range candidates {
 		if err := exec.Command(ep, "--app="+htmlURL, "--window-size=1200,800").Start(); err == nil {
+			taskbarIdentity(htmlPath)
 			return
 		}
 	}
@@ -367,6 +368,7 @@ func main() {
 `
 	os.WriteFile(filepath.Join(viewerWork, "main.go"), []byte(viewerMain), 0644)
 	os.WriteFile(filepath.Join(viewerWork, "go.mod"), []byte("module netraviewer\n\ngo 1.21\n"), 0644)
+	writeTaskbarHelper(viewerWork, appName, safeName)
 	embedIconFor(appName, viewerWork, "")
 
 	viewerCmd := exec.Command("go", "build",
