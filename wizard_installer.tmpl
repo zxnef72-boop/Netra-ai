@@ -1,0 +1,588 @@
+// Setup.exe wizard untuk __APPNAME__ (Win32 murni via syscall, tanpa library pihak ketiga)
+package main
+
+import (
+	"embed"
+	"fmt"
+	"io/fs"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"sync"
+	"syscall"
+	"unsafe"
+)
+
+//go:embed all:payload
+var payloadFS embed.FS
+
+const AppName = "__APPNAME__"
+const ViewerExe = "__VIEWEREXE__"
+const UninstallExe = "__SAFENAME__-uninstall.exe"
+
+var (
+	user32   = syscall.NewLazyDLL("user32.dll")
+	gdi32    = syscall.NewLazyDLL("gdi32.dll")
+	kernel32 = syscall.NewLazyDLL("kernel32.dll")
+	shell32  = syscall.NewLazyDLL("shell32.dll")
+	comctl32 = syscall.NewLazyDLL("comctl32.dll")
+	ole32    = syscall.NewLazyDLL("ole32.dll")
+	advapi32 = syscall.NewLazyDLL("advapi32.dll")
+
+	pRegisterClassEx  = user32.NewProc("RegisterClassExW")
+	pCreateWindowEx   = user32.NewProc("CreateWindowExW")
+	pDefWindowProc    = user32.NewProc("DefWindowProcW")
+	pGetMessage       = user32.NewProc("GetMessageW")
+	pIsDialogMessage  = user32.NewProc("IsDialogMessageW")
+	pTranslateMessage = user32.NewProc("TranslateMessage")
+	pDispatchMessage  = user32.NewProc("DispatchMessageW")
+	pPostQuitMessage  = user32.NewProc("PostQuitMessage")
+	pPostMessage      = user32.NewProc("PostMessageW")
+	pSendMessage      = user32.NewProc("SendMessageW")
+	pShowWindow       = user32.NewProc("ShowWindow")
+	pEnableWindow     = user32.NewProc("EnableWindow")
+	pSetWindowText    = user32.NewProc("SetWindowTextW")
+	pGetWindowText    = user32.NewProc("GetWindowTextW")
+	pDestroyWindow    = user32.NewProc("DestroyWindow")
+	pLoadCursor       = user32.NewProc("LoadCursorW")
+	pLoadIcon         = user32.NewProc("LoadIconW")
+	pGetSystemMetrics = user32.NewProc("GetSystemMetrics")
+	pAdjustRect       = user32.NewProc("AdjustWindowRectEx")
+	pAdjustRectDpi    = user32.NewProc("AdjustWindowRectExForDpi")
+	pGetDpiForSystem  = user32.NewProc("GetDpiForSystem")
+	pMessageBox       = user32.NewProc("MessageBoxW")
+	pSetFocus         = user32.NewProc("SetFocus")
+
+	pGetStockObject   = gdi32.NewProc("GetStockObject")
+	pCreateFont       = gdi32.NewProc("CreateFontW")
+	pCreateSolidBrush = gdi32.NewProc("CreateSolidBrush")
+	pSetTextColor     = gdi32.NewProc("SetTextColor")
+	pSetBkColor       = gdi32.NewProc("SetBkColor")
+
+	pGetModuleHandle      = kernel32.NewProc("GetModuleHandleW")
+	pInitCommonControlsEx = comctl32.NewProc("InitCommonControlsEx")
+	pSHBrowseForFolder    = shell32.NewProc("SHBrowseForFolderW")
+	pSHGetPathFromIDList  = shell32.NewProc("SHGetPathFromIDListW")
+	pCoInitializeEx       = ole32.NewProc("CoInitializeEx")
+	pCoTaskMemFree        = ole32.NewProc("CoTaskMemFree")
+
+	pRegCreateKeyEx = advapi32.NewProc("RegCreateKeyExW")
+	pRegSetValueEx  = advapi32.NewProc("RegSetValueExW")
+	pRegCloseKey    = advapi32.NewProc("RegCloseKey")
+)
+
+const (
+	wmDestroy        = 0x0002
+	wmSetFont        = 0x0030
+	wmClose          = 0x0010
+	wmCommand        = 0x0111
+	wmCtlColorStatic = 0x0138
+	wmApp            = 0x8000
+	wmProgress       = wmApp + 1
+	wmDone           = wmApp + 2
+
+	wsCaption      = 0x00C00000
+	wsSysMenu      = 0x00080000
+	wsMinimizeBox  = 0x00020000
+	wsChild        = 0x40000000
+	wsVisible      = 0x10000000
+	wsTabStop      = 0x00010000
+	wsExClientEdge = 0x00000200
+
+	ssCenter      = 0x1
+	ssEtchedHorz  = 0x10
+	bsDefPush     = 0x1
+	bsAutoCheck   = 0x3
+	esAutoHScroll = 0x80
+	pbsSmooth     = 0x1
+	bmGetCheck    = 0x00F0
+	bmSetCheck    = 0x00F1
+	pbmSetPos     = 0x0402
+	pbmSetRange32 = 0x0406
+
+	idNext   = 1
+	idCancel = 2
+	idBack   = 102
+	idChange = 104
+	idEdit   = 105
+)
+
+type wndClassEx struct {
+	cbSize        uint32
+	style         uint32
+	lpfnWndProc   uintptr
+	cbClsExtra    int32
+	cbWndExtra    int32
+	hInstance     uintptr
+	hIcon         uintptr
+	hCursor       uintptr
+	hbrBackground uintptr
+	lpszMenuName  *uint16
+	lpszClassName *uint16
+	hIconSm       uintptr
+}
+
+type winMsg struct {
+	hwnd    uintptr
+	message uint32
+	wParam  uintptr
+	lParam  uintptr
+	time    uint32
+	ptX     int32
+	ptY     int32
+}
+
+type winRect struct{ left, top, right, bottom int32 }
+
+type initCC struct{ dwSize, dwICC uint32 }
+
+type browseInfo struct {
+	hwndOwner      uintptr
+	pidlRoot       uintptr
+	pszDisplayName *uint16
+	lpszTitle      *uint16
+	ulFlags        uint32
+	lpfn           uintptr
+	lParam         uintptr
+	iImage         int32
+}
+
+var (
+	hwndMain, hwndBanner, hwndNext, hwndBack, hwndCancel uintptr
+	hwndEdit, hwndProg, hwndStatus, hwndRun              uintptr
+	fontNormal, fontTitle, fontBanner                    uintptr
+	brushBlack, brushWhite                               uintptr
+	pages                                                [4][]uintptr
+	curPage                                              int
+	dpiScale                                             = 1.0
+	installing                                           bool
+	installDir                                           string
+	statusText                                           string
+	installErr                                           string
+	mu                                                   sync.Mutex
+)
+
+func init() { runtime.LockOSThread() }
+
+func u16(s string) *uint16 {
+	p, _ := syscall.UTF16PtrFromString(s)
+	return p
+}
+
+func sc(v int) uintptr { return uintptr(float64(v)*dpiScale + 0.5) }
+
+func setText(h uintptr, s string) { pSetWindowText.Call(h, uintptr(unsafe.Pointer(u16(s)))) }
+
+func getText(h uintptr) string {
+	buf := make([]uint16, 520)
+	pGetWindowText.Call(h, uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)))
+	return syscall.UTF16ToString(buf)
+}
+
+func enable(h uintptr, on bool) {
+	v := uintptr(0)
+	if on {
+		v = 1
+	}
+	pEnableWindow.Call(h, v)
+}
+
+func msgBox(text string, flags uintptr) uintptr {
+	r, _, _ := pMessageBox.Call(hwndMain, uintptr(unsafe.Pointer(u16(text))), uintptr(unsafe.Pointer(u16(AppName))), flags)
+	return r
+}
+
+func mkFont(pt, weight int) uintptr {
+	h := -(pt*int(dpiScale*96) + 36) / 72
+	f, _, _ := pCreateFont.Call(uintptr(h), 0, 0, 0, uintptr(weight), 0, 0, 0, 1, 0, 0, 5, 0,
+		uintptr(unsafe.Pointer(u16("Segoe UI"))))
+	return f
+}
+
+func ctl(class, text string, style, ex uintptr, x, y, w, h int, id uintptr, font uintptr) uintptr {
+	hw, _, _ := pCreateWindowEx.Call(ex, uintptr(unsafe.Pointer(u16(class))), uintptr(unsafe.Pointer(u16(text))),
+		style, sc(x), sc(y), sc(w), sc(h), hwndMain, id, 0, 0)
+	if font != 0 {
+		pSendMessage.Call(hw, wmSetFont, font, 1)
+	}
+	return hw
+}
+
+func pageCtl(p int, h uintptr) uintptr {
+	pages[p] = append(pages[p], h)
+	return h
+}
+
+func buildUI() {
+	fontNormal = mkFont(9, 400)
+	fontTitle = mkFont(13, 700)
+	fontBanner = mkFont(16, 700)
+	brushBlack, _, _ = pCreateSolidBrush.Call(0)
+	brushWhite, _, _ = pGetStockObject.Call(0)
+
+	hwndBanner = ctl("STATIC", "\r\n\r\n\r\n\r\n"+AppName+"\r\nSetup", wsChild|wsVisible|ssCenter, 0, 0, 0, 170, 380, 0, fontBanner)
+	ctl("STATIC", "", wsChild|wsVisible|ssEtchedHorz, 0, 190, 322, 360, 2, 0, 0)
+
+	hwndBack = ctl("BUTTON", "< Kembali", wsChild|wsVisible|wsTabStop, 0, 280, 336, 80, 26, idBack, fontNormal)
+	hwndNext = ctl("BUTTON", "Berikutnya >", wsChild|wsVisible|wsTabStop|bsDefPush, 0, 366, 336, 90, 26, idNext, fontNormal)
+	hwndCancel = ctl("BUTTON", "Batal", wsChild|wsVisible|wsTabStop, 0, 462, 336, 80, 26, idCancel, fontNormal)
+
+	pageCtl(0, ctl("STATIC", "Selamat datang di Setup "+AppName, wsChild|wsVisible, 0, 190, 24, 360, 60, 0, fontTitle))
+	pageCtl(0, ctl("STATIC", "Wizard ini akan memasang "+AppName+" di komputer Anda.\r\n\r\nKlik Berikutnya untuk melanjutkan atau Batal untuk keluar.", wsChild|wsVisible, 0, 190, 100, 360, 120, 0, fontNormal))
+
+	pageCtl(1, ctl("STATIC", "Folder tujuan", wsChild|wsVisible, 0, 190, 24, 360, 30, 0, fontTitle))
+	pageCtl(1, ctl("STATIC", "Pasang "+AppName+" ke folder:", wsChild|wsVisible, 0, 190, 70, 360, 22, 0, fontNormal))
+	hwndEdit = pageCtl(1, ctl("EDIT", installDir, wsChild|wsVisible|wsTabStop|esAutoHScroll, wsExClientEdge, 190, 98, 360, 24, idEdit, fontNormal))
+	pageCtl(1, ctl("BUTTON", "Ubah...", wsChild|wsVisible|wsTabStop, 0, 190, 132, 90, 26, idChange, fontNormal))
+
+	pageCtl(2, ctl("STATIC", "Sedang memasang", wsChild|wsVisible, 0, 190, 24, 360, 30, 0, fontTitle))
+	pageCtl(2, ctl("STATIC", "Mohon tunggu, "+AppName+" sedang dipasang.", wsChild|wsVisible, 0, 190, 70, 360, 22, 0, fontNormal))
+	hwndProg = pageCtl(2, ctl("msctls_progress32", "", wsChild|wsVisible|pbsSmooth, 0, 190, 110, 360, 22, 0, 0))
+	pSendMessage.Call(hwndProg, pbmSetRange32, 0, 100)
+	hwndStatus = pageCtl(2, ctl("STATIC", "", wsChild|wsVisible, 0, 190, 142, 360, 40, 0, fontNormal))
+
+	pageCtl(3, ctl("STATIC", "Instalasi selesai", wsChild|wsVisible, 0, 190, 24, 360, 30, 0, fontTitle))
+	pageCtl(3, ctl("STATIC", AppName+" berhasil dipasang.\r\nPintasan ada di Desktop dan Start Menu. Uninstall lewat Pengaturan > Aplikasi.", wsChild|wsVisible, 0, 190, 70, 360, 60, 0, fontNormal))
+	hwndRun = pageCtl(3, ctl("BUTTON", "Jalankan "+AppName+" sekarang", wsChild|wsVisible|wsTabStop|bsAutoCheck, 0, 190, 140, 360, 24, 0, fontNormal))
+	pSendMessage.Call(hwndRun, bmSetCheck, 1, 0)
+}
+
+func showPage(p int) {
+	curPage = p
+	for i := range pages {
+		cmd := uintptr(0)
+		if i == p {
+			cmd = 5
+		}
+		for _, h := range pages[i] {
+			pShowWindow.Call(h, cmd)
+		}
+	}
+	switch p {
+	case 0:
+		setText(hwndNext, "Berikutnya >")
+		enable(hwndNext, true)
+		enable(hwndBack, false)
+		enable(hwndCancel, true)
+	case 1:
+		setText(hwndNext, "Pasang")
+		enable(hwndNext, true)
+		enable(hwndBack, true)
+		enable(hwndCancel, true)
+	case 2:
+		enable(hwndNext, false)
+		enable(hwndBack, false)
+		enable(hwndCancel, false)
+	case 3:
+		setText(hwndNext, "Selesai")
+		enable(hwndNext, true)
+		enable(hwndBack, false)
+		enable(hwndCancel, false)
+	}
+}
+
+func browse() {
+	buf := make([]uint16, 260)
+	bi := browseInfo{hwndOwner: hwndMain, pszDisplayName: &buf[0], lpszTitle: u16("Pilih folder tujuan"), ulFlags: 0x1 | 0x40}
+	pidl, _, _ := pSHBrowseForFolder.Call(uintptr(unsafe.Pointer(&bi)))
+	if pidl == 0 {
+		return
+	}
+	path := make([]uint16, 520)
+	ok, _, _ := pSHGetPathFromIDList.Call(pidl, uintptr(unsafe.Pointer(&path[0])))
+	pCoTaskMemFree.Call(pidl)
+	if ok != 0 {
+		setText(hwndEdit, filepath.Join(syscall.UTF16ToString(path), AppName))
+	}
+}
+
+func startInstall() {
+	dir := strings.TrimSpace(getText(hwndEdit))
+	if dir == "" || !filepath.IsAbs(dir) {
+		msgBox("Folder tujuan harus berupa path lengkap, misalnya C:\\Users\\Nama\\AppData\\Local\\"+AppName, 0x30)
+		return
+	}
+	installDir = dir
+	installing = true
+	showPage(2)
+	go func() {
+		err := doInstall(dir)
+		mu.Lock()
+		installErr = ""
+		if err != nil {
+			installErr = err.Error()
+		}
+		mu.Unlock()
+		pPostMessage.Call(hwndMain, wmDone, 0, 0)
+	}()
+}
+
+func onDone() {
+	installing = false
+	mu.Lock()
+	e := installErr
+	mu.Unlock()
+	if e != "" {
+		msgBox("Instalasi gagal:\r\n"+e, 0x10)
+		showPage(1)
+		return
+	}
+	showPage(3)
+}
+
+func finish() {
+	r, _, _ := pSendMessage.Call(hwndRun, bmGetCheck, 0, 0)
+	if r == 1 {
+		_ = exec.Command(filepath.Join(installDir, ViewerExe)).Start()
+	}
+	pDestroyWindow.Call(hwndMain)
+}
+
+func onCommand(id uintptr) {
+	switch id {
+	case idNext:
+		switch curPage {
+		case 0:
+			showPage(1)
+		case 1:
+			startInstall()
+		case 3:
+			finish()
+		}
+	case idBack:
+		if curPage == 1 {
+			showPage(0)
+		}
+	case idCancel:
+		if curPage < 2 {
+			pSendMessage.Call(hwndMain, wmClose, 0, 0)
+		}
+	case idChange:
+		browse()
+	}
+}
+
+func wndProc(hwnd, m, wp, lp uintptr) uintptr {
+	switch uint32(m) {
+	case wmCommand:
+		onCommand(wp & 0xFFFF)
+		return 0
+	case wmCtlColorStatic:
+		if lp == hwndBanner {
+			pSetTextColor.Call(wp, 0xFFFFFF)
+			pSetBkColor.Call(wp, 0)
+			return brushBlack
+		}
+		pSetTextColor.Call(wp, 0)
+		pSetBkColor.Call(wp, 0xFFFFFF)
+		return brushWhite
+	case wmClose:
+		if installing {
+			return 0
+		}
+		if curPage < 2 && msgBox("Batalkan instalasi "+AppName+"?", 0x4|0x20) != 6 {
+			return 0
+		}
+		pDestroyWindow.Call(hwnd)
+		return 0
+	case wmDestroy:
+		pPostQuitMessage.Call(0)
+		return 0
+	case wmProgress:
+		pSendMessage.Call(hwndProg, pbmSetPos, wp, 0)
+		mu.Lock()
+		s := statusText
+		mu.Unlock()
+		setText(hwndStatus, s)
+		return 0
+	case wmDone:
+		onDone()
+		return 0
+	}
+	r, _, _ := pDefWindowProc.Call(hwnd, m, wp, lp)
+	return r
+}
+
+func report(pct int, text string) {
+	mu.Lock()
+	statusText = text
+	mu.Unlock()
+	pPostMessage.Call(hwndMain, wmProgress, uintptr(pct), 0)
+}
+
+func esc(s string) string { return strings.ReplaceAll(s, "'", "''") }
+
+func makeShortcuts(dir string) {
+	exePath := filepath.Join(dir, ViewerExe)
+	userProfile := os.Getenv("USERPROFILE")
+	desktop := filepath.Join(userProfile, "Desktop")
+	startMenu := filepath.Join(userProfile, "AppData", "Roaming", "Microsoft", "Windows", "Start Menu", "Programs", AppName)
+	os.MkdirAll(startMenu, 0755)
+	ps := fmt.Sprintf(`
+$WshShell = New-Object -ComObject WScript.Shell
+$ico = Get-ChildItem -Path '%s' -Filter *.ico -ErrorAction SilentlyContinue | Select-Object -First 1
+$Desktop = $WshShell.CreateShortcut('%s\%s.lnk')
+$Desktop.TargetPath = '%s'
+$Desktop.WorkingDirectory = '%s'
+if ($ico) { $Desktop.IconLocation = "$($ico.FullName),0" }
+$Desktop.Save()
+$Start = $WshShell.CreateShortcut('%s\%s.lnk')
+$Start.TargetPath = '%s'
+$Start.WorkingDirectory = '%s'
+if ($ico) { $Start.IconLocation = "$($ico.FullName),0" }
+$Start.Save()
+`, esc(dir), esc(desktop), esc(AppName), esc(exePath), esc(dir), esc(startMenu), esc(AppName), esc(exePath), esc(dir))
+	cmd := exec.Command("powershell", "-NoProfile", "-WindowStyle", "Hidden", "-Command", ps)
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	_ = cmd.Run()
+}
+
+func writeUninstallKey(dir string) {
+	const (
+		hkeyCurrentUser uintptr = 0x80000001
+		keySetValue     uint32  = 0x0002
+		regSz           uint32  = 1
+	)
+	subKey := "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\" + AppName
+	var hKey syscall.Handle
+	var disp uint32
+	rc, _, _ := pRegCreateKeyEx.Call(hkeyCurrentUser, uintptr(unsafe.Pointer(u16(subKey))), 0, 0, 0,
+		uintptr(keySetValue), 0, uintptr(unsafe.Pointer(&hKey)), uintptr(unsafe.Pointer(&disp)))
+	if rc != 0 {
+		return
+	}
+	entries := [][2]string{
+		{"DisplayName", AppName},
+		{"DisplayVersion", "1.0"},
+		{"Publisher", "NetRa"},
+		{"InstallLocation", dir},
+		{"DisplayIcon", filepath.Join(dir, ViewerExe)},
+		{"UninstallString", "\"" + filepath.Join(dir, UninstallExe) + "\""},
+	}
+	for _, e := range entries {
+		v, _ := syscall.UTF16FromString(e[1])
+		pRegSetValueEx.Call(uintptr(hKey), uintptr(unsafe.Pointer(u16(e[0]))), 0, uintptr(regSz),
+			uintptr(unsafe.Pointer(&v[0])), uintptr(len(v)*2))
+	}
+	pRegCloseKey.Call(uintptr(hKey))
+}
+
+func doInstall(dir string) error {
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("gagal membuat folder: %w", err)
+	}
+	total := 0
+	fs.WalkDir(payloadFS, "payload", func(p string, d fs.DirEntry, err error) error {
+		if err == nil && !d.IsDir() {
+			total++
+		}
+		return nil
+	})
+	if total == 0 {
+		total = 1
+	}
+	done := 0
+	err := fs.WalkDir(payloadFS, "payload", func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, _ := filepath.Rel("payload", p)
+		target := filepath.Join(dir, rel)
+		if d.IsDir() {
+			return os.MkdirAll(target, 0755)
+		}
+		data, err := payloadFS.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(target, data, 0644); err != nil {
+			return err
+		}
+		done++
+		report(done*80/total, "Menyalin: "+rel)
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("gagal menyalin file: %w", err)
+	}
+	report(85, "Membuat pintasan...")
+	makeShortcuts(dir)
+	report(95, "Mendaftarkan aplikasi...")
+	writeUninstallKey(dir)
+	report(100, "Selesai")
+	return nil
+}
+
+func initDPI() {
+	if pGetDpiForSystem.Find() == nil {
+		if r, _, _ := pGetDpiForSystem.Call(); r != 0 {
+			dpiScale = float64(r) / 96
+		}
+	}
+}
+
+func main() {
+	local := os.Getenv("LOCALAPPDATA")
+	if local == "" {
+		syscall.Exit(1)
+	}
+	installDir = filepath.Join(local, AppName)
+	pCoInitializeEx.Call(0, 2)
+	initDPI()
+	cc := initCC{dwSize: 8, dwICC: 0x20}
+	pInitCommonControlsEx.Call(uintptr(unsafe.Pointer(&cc)))
+
+	hInst, _, _ := pGetModuleHandle.Call(0)
+	cursor, _, _ := pLoadCursor.Call(0, 32512)
+	icon, _, _ := pLoadIcon.Call(hInst, 1)
+	cls := u16("NetraSetupWizard")
+	wc := wndClassEx{
+		lpfnWndProc:   syscall.NewCallback(wndProc),
+		hInstance:     hInst,
+		hIcon:         icon,
+		hIconSm:       icon,
+		hCursor:       cursor,
+		hbrBackground: 6,
+		lpszClassName: cls,
+	}
+	wc.cbSize = uint32(unsafe.Sizeof(wc))
+	if r, _, _ := pRegisterClassEx.Call(uintptr(unsafe.Pointer(&wc))); r == 0 {
+		syscall.Exit(1)
+	}
+
+	style := uintptr(wsCaption | wsSysMenu | wsMinimizeBox)
+	rc := winRect{0, 0, int32(sc(560)), int32(sc(380))}
+	if pAdjustRectDpi.Find() == nil {
+		pAdjustRectDpi.Call(uintptr(unsafe.Pointer(&rc)), style, 0, 0, uintptr(dpiScale*96))
+	} else {
+		pAdjustRect.Call(uintptr(unsafe.Pointer(&rc)), style, 0, 0)
+	}
+	w, h := int(rc.right-rc.left), int(rc.bottom-rc.top)
+	sw, _, _ := pGetSystemMetrics.Call(0)
+	sh, _, _ := pGetSystemMetrics.Call(1)
+	x, y := (int(sw)-w)/2, (int(sh)-h)/2
+	hwndMain, _, _ = pCreateWindowEx.Call(0, uintptr(unsafe.Pointer(cls)), uintptr(unsafe.Pointer(u16("Setup - "+AppName))),
+		style, uintptr(x), uintptr(y), uintptr(w), uintptr(h), 0, 0, hInst, 0)
+	if hwndMain == 0 {
+		syscall.Exit(1)
+	}
+	buildUI()
+	showPage(0)
+	pShowWindow.Call(hwndMain, 5)
+	pSetFocus.Call(hwndNext)
+
+	var m winMsg
+	for {
+		r, _, _ := pGetMessage.Call(uintptr(unsafe.Pointer(&m)), 0, 0, 0)
+		if int32(r) <= 0 {
+			break
+		}
+		if ok, _, _ := pIsDialogMessage.Call(hwndMain, uintptr(unsafe.Pointer(&m))); ok != 0 {
+			continue
+		}
+		pTranslateMessage.Call(uintptr(unsafe.Pointer(&m)))
+		pDispatchMessage.Call(uintptr(unsafe.Pointer(&m)))
+	}
+}

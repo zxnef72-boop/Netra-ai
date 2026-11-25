@@ -190,6 +190,7 @@ func cmdBuildEXEPortable(htmlFolder, appName, iconPath string) (string, error) {
 			}
 		}
 	}
+	data = injectFavicon(data, appName, iconPath)
 	if err := os.WriteFile(filepath.Join(payloadDir, "index.html"), data, 0644); err != nil {
 		return log.String(), err
 	}
@@ -222,6 +223,11 @@ func cmdBuildEXEPortable(htmlFolder, appName, iconPath string) (string, error) {
 		return log.String(), err
 	}
 	log.WriteString("  `→` stub        OK\n")
+	if err := embedIconFor(appName, workDir, iconPath); err != nil {
+		log.WriteString("  `→` ikon        dilewati: " + err.Error() + "\n")
+	} else {
+		log.WriteString("  `→` ikon        OK\n")
+	}
 
 	outExe := filepath.Join(outDir, safeName+".exe")
 	cmd := exec.Command("go", "build", "-o", outExe, "-ldflags", "-s -w -H=windowsgui", ".")

@@ -244,6 +244,7 @@ $Start.Save()
 // Input: folder HTML + nama app
 func cmdBuildWinInstaller(htmlFolder, appName string) (string, error) {
 	var log strings.Builder
+	appName, iconArg := splitIconArg(appName)
 
 	// Expand ~
 	if strings.HasPrefix(htmlFolder, "~/") {
@@ -256,12 +257,18 @@ func cmdBuildWinInstaller(htmlFolder, appName string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("path gak ketemu: %s", htmlFolder)
 	}
-	if !info.IsDir() {
-		return "", fmt.Errorf("harus folder, bukan file: %s", htmlFolder)
+	singleFile := !info.IsDir()
+	if singleFile {
+		lower := strings.ToLower(info.Name())
+		if !strings.HasSuffix(lower, ".html") && !strings.HasSuffix(lower, ".htm") {
+			return "", fmt.Errorf("harus folder atau file .html/.htm: %s", htmlFolder)
+		}
 	}
 
 	indexPath := filepath.Join(htmlFolder, "index.html")
-	if _, err := os.Stat(indexPath); err != nil {
+	if singleFile {
+		indexPath = htmlFolder
+	} else if _, err := os.Stat(indexPath); err != nil {
 		// Cari .html pertama
 		entries, _ := os.ReadDir(htmlFolder)
 		found := false
@@ -295,7 +302,7 @@ func cmdBuildWinInstaller(htmlFolder, appName string) (string, error) {
 	os.MkdirAll(outDir, 0755)
 
 	log.WriteString(fmt.Sprintf("**Building Go Installer: %s**\n\n", appName))
-	log.WriteString(fmt.Sprintf("Folder : `%s`\n", htmlFolder))
+	log.WriteString(fmt.Sprintf("Sumber : `%s`\n", htmlFolder))
 	log.WriteString(fmt.Sprintf("WorkDir: `%s`\n\n", workDir))
 
 	// 1. Bikin struktur installer
@@ -360,6 +367,7 @@ func main() {
 `
 	os.WriteFile(filepath.Join(viewerWork, "main.go"), []byte(viewerMain), 0644)
 	os.WriteFile(filepath.Join(viewerWork, "go.mod"), []byte("module netraviewer\n\ngo 1.21\n"), 0644)
+	embedIconFor(appName, viewerWork, "")
 
 	viewerCmd := exec.Command("go", "build",
 		"-o", filepath.Join(payloadDir, viewerExe),
@@ -382,6 +390,7 @@ func main() {
 	os.MkdirAll(uninstallerWork, 0755)
 	os.WriteFile(filepath.Join(uninstallerWork, "main.go"), []byte(uninstallerSrc), 0644)
 	os.WriteFile(filepath.Join(uninstallerWork, "go.mod"), []byte("module netrauninstaller\n\ngo 1.21\n"), 0644)
+	embedIconFor(appName, uninstallerWork, "")
 
 	uninstallerExe := safeName + "-uninstall.exe"
 	uninstallerCmd := exec.Command("go", "build",
@@ -400,13 +409,19 @@ func main() {
 
 	// 3. Copy HTML + assets ke payload
 	data, _ := os.ReadFile(indexPath)
+	data, iconLog := installerPrepIcon(appName, iconArg, indexPath, workDir, payloadDir, data)
+	log.WriteString(iconLog)
+	data = injectFavicon(data, appName, "")
 	os.WriteFile(filepath.Join(payloadDir, "index.html"), data, 0644)
 
 	// Copy semua file lain di folder HTML
-	entries, _ := os.ReadDir(htmlFolder)
+	var entries []os.DirEntry
+	if !singleFile {
+		entries, _ = os.ReadDir(htmlFolder)
+	}
 	for _, e := range entries {
 		name := e.Name()
-		if name == "index.html" || name == "index.htm" {
+		if filepath.Join(htmlFolder, name) == indexPath {
 			continue
 		}
 		src := filepath.Join(htmlFolder, name)
@@ -420,11 +435,12 @@ func main() {
 	log.WriteString("  `→` payload     OK\n")
 
 	// 4. Generate installer main.go
-	installerSrc := strings.ReplaceAll(installerTemplate, "__APPNAME__", appName)
+	installerSrc := strings.ReplaceAll(pickInstallerTemplate(), "__APPNAME__", appName)
 	installerSrc = strings.ReplaceAll(installerSrc, "__VIEWEREXE__", viewerExe)
 	installerSrc = strings.ReplaceAll(installerSrc, "__SAFENAME__", safeName)
 	os.WriteFile(filepath.Join(installerDir, "main.go"), []byte(installerSrc), 0644)
 	os.WriteFile(filepath.Join(installerDir, "go.mod"), []byte("module netrainstaller\n\ngo 1.21\n"), 0644)
+	embedIconFor(appName, installerDir, "")
 	log.WriteString("  `→` installer   OK\n")
 
 	// 5. Compile Setup.exe
