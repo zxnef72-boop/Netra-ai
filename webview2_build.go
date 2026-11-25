@@ -3,13 +3,16 @@ package main
 import (
 	"fmt"
 	"os/exec"
+	"strconv"
+	"strings"
 )
 
 // nativeWebView2Viewer is the standalone Windows viewer shared by installer builders.
-// The top-level window belongs to the generated application; WebView2 runs as its renderer.
+// The top-level window belongs to the generated application; WebView2 renders the HTML.
 const nativeWebView2Viewer = `package main
 
 import (
+	"net/url"
 	"os"
 	"path/filepath"
 	"syscall"
@@ -57,10 +60,15 @@ func main() {
 		return
 	}
 	defer w.Destroy()
-	w.Navigate("file:///" + filepath.ToSlash(htmlPath))
+	u := url.URL{Scheme: "file", Path: filepath.ToSlash(htmlPath)}
+	w.Navigate(u.String())
 	w.Run()
 }
 `
+
+func renderNativeWebView2Viewer(appName string) string {
+	return strings.ReplaceAll(nativeWebView2Viewer, "__APPNAME__", strconv.Quote(appName))
+}
 
 // prepareWebView2Module resolves the Windows-only WebView2 binding in generated
 // build workspaces before cross-compilation.
