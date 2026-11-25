@@ -12,8 +12,8 @@ config.json.*.bak
 config.example.json
 
 # Binary
-netra-ai-bin
-netra-ai.exe
+/netra-ai-bin
+/netra-ai.exe
 netra-server/netra-server
 *.exe
 
@@ -37,3 +37,8 @@ debug.keystore
 
 # Temp grep dumps
 scan*.txt
+*.bak_*
+/netra-ai
+/netra-ai.exe
+/netra-ai-bin
+/netra-ai-manifest
