@@ -294,64 +294,79 @@ func (m Model) update0(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case chunkMsg:
 		if msg.Err != nil {
 			if msg.RateLimit && len(m.allProviders) > 1 {
-				next := (m.activeIdx + 1) % len(m.allProviders)
-				if next != m.activeIdx {
-					oldName := m.allProviders[m.activeIdx].Name
-					m.activeIdx = next
-					m.provider = m.allProviders[m.activeIdx]
-					if cfg, err := loadConfig(); err == nil {
-						cfg.ActiveProvider = -1
-						for i, cp := range cfg.Providers {
-							if cp.Name == m.provider.Name {
-								cfg.ActiveProvider = i
-								break
-							}
-						}
-						cfg.Save()
+				startIdx := m.activeIdx
+				nextIdx := startIdx
+				for step := 1; step < len(m.allProviders); step++ {
+					nextIdx = (startIdx + step) % len(m.allProviders)
+					if nextIdx == 0 {
+						nextIdx = 1 // Paksa lompat ke provider online pertama
 					}
-					m.messages = append(m.messages, ChatMsg{Role: "assistant",
-						Text: fmt.Sprintf("Provider %s kena limit. Auto-switch ke %s, coba lagi...",
-							oldName, m.provider.Name)})
-					history := []Message{{Role: "system", Content: m.systemPrompt}}
-					for _, cm := range m.messages {
-						if cm.Role == "error" || cm.Text == "" {
-							continue
-						}
-						if strings.HasPrefix(cm.Text, "Provider ") && strings.Contains(cm.Text, "kena limit") {
-							continue
-						}
-						history = append(history, Message{Role: cm.Role, Content: cm.Text})
+					if nextIdx != startIdx {
+						break
 					}
-					if len(history) > 0 && history[len(history)-1].Role == "assistant" && history[len(history)-1].Content == "" {
-						history = history[:len(history)-1]
-					}
-					// === Eliza offline — default. AI cuma kalau /ask ===
-					lastUserText := ""
-					for i := len(m.messages) - 1; i >= 0; i-- {
-						if m.messages[i].Role == "user" {
-							lastUserText = m.messages[i].Text
+				}
+				if nextIdx == startIdx {
+					m.messages = append(m.messages, ChatMsg{Role: "error",
+						Text: "Semua provider AI online sedang limit/gangguan. Coba lagi nanti atau gunakan mode offline (tanpa /ask)."})
+					m.streaming = false
+					m.chatScroll = 0
+					return m, nil
+				}
+				oldName := m.allProviders[m.activeIdx].Name
+				m.activeIdx = nextIdx
+				m.provider = m.allProviders[m.activeIdx]
+				if cfg, err := loadConfig(); err == nil {
+					cfg.ActiveProvider = -1
+					for i, cp := range cfg.Providers {
+						if cp.Name == m.provider.Name {
+							cfg.ActiveProvider = i
 							break
 						}
 					}
-
-					useAI := strings.HasPrefix(strings.TrimSpace(lastUserText), "/ask ")
-					if !useAI {
-						reply := elizaReplyCore(lastUserText)
-						if reply == "" {
-							reply = "Hmm. Ceritain lebih dong."
-						}
-						m.messages = append(m.messages, ChatMsg{Role: "assistant", Text: reply})
-						m.streaming = false
-						m.chatScroll = 0
-						return m, nil
-					}
-
-					// User pakai /ask — baru route ke AI
-					ch := make(chan StreamChunk, 64)
-					m.streamCh = ch
-					go streamChat(m.provider, history, ch)
-					return m, waitForChunk(ch)
+					cfg.Save()
 				}
+				m.messages = append(m.messages, ChatMsg{Role: "assistant",
+					Text: fmt.Sprintf("Provider %s kena limit. Auto-switch ke %s, coba lagi...",
+						oldName, m.provider.Name)})
+				history := []Message{{Role: "system", Content: m.systemPrompt}}
+				for _, cm := range m.messages {
+					if cm.Role == "error" || cm.Text == "" {
+						continue
+					}
+					if strings.HasPrefix(cm.Text, "Provider ") && strings.Contains(cm.Text, "kena limit") {
+						continue
+					}
+					history = append(history, Message{Role: cm.Role, Content: cm.Text})
+				}
+				if len(history) > 0 && history[len(history)-1].Role == "assistant" && history[len(history)-1].Content == "" {
+					history = history[:len(history)-1]
+				}
+				// === Eliza offline — default. AI cuma kalau /ask ===
+				lastUserText := ""
+				for i := len(m.messages) - 1; i >= 0; i-- {
+					if m.messages[i].Role == "user" {
+						lastUserText = m.messages[i].Text
+						break
+					}
+				}
+
+				useAI := strings.HasPrefix(strings.TrimSpace(lastUserText), "/ask ")
+				if !useAI {
+					reply := elizaReplyCore(lastUserText)
+					if reply == "" {
+						reply = "Hmm. Ceritain lebih dong."
+					}
+					m.messages = append(m.messages, ChatMsg{Role: "assistant", Text: reply})
+					m.streaming = false
+					m.chatScroll = 0
+					return m, nil
+				}
+
+				// User pakai /ask — baru route ke AI
+				ch := make(chan StreamChunk, 64)
+				m.streamCh = ch
+				go streamChat(m.provider, history, ch)
+				return m, waitForChunk(ch)
 			}
 			// Fallback ke Eliza HANYA kalau provider aktif emang Eliza
 			isEliza := strings.HasPrefix(strings.ToLower(m.provider.Name), "eliza")
