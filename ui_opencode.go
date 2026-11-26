@@ -206,6 +206,9 @@ func (m Model) ocHeader(w int) string {
 // ---------- panel input (home dan chat) ----------
 
 func (m Model) ocInputPanel(w int, roomy bool) string {
+	if m.vendorWizardActive {
+		return m.ocVendorWizardPanel(w)
+	}
 	bg := ocPanel
 	bar := clrAccent2
 	if m.streaming {
@@ -303,11 +306,186 @@ func (m Model) ocInputPanel(w int, roomy bool) string {
 	return strings.Join(rows, "\n")
 }
 
+// ocVendorWizardPanel — pemilih provider dengan tampilan wizard.
+func (m Model) ocVendorWizardPanel(w int) string {
+	bg := ocPanel
+	bar := clrAccent2
+	textW := w - 5
+	if textW < 10 {
+		textW = 10
+	}
+
+	blank := func() string {
+		return newOcRow(bg).render(w, bar)
+	}
+	rows := []string{blank()}
+
+	tabs := newOcRow(bg)
+	tabs.add(clrText, "  ")
+	if m.vendorWizardTab == 0 {
+		tabs.addRaw(lipgloss.NewStyle().
+			Foreground(clrText).Background(ocPanelHi).
+			Bold(true).Render(" Provider "))
+	} else {
+		tabs.add(clrMuted, " Provider ")
+	}
+	tabs.add(clrText, "  ")
+	if m.vendorWizardTab == 1 {
+		tabs.addRaw(lipgloss.NewStyle().
+			Foreground(clrText).Background(ocPanelHi).
+			Bold(true).Render(" Konfirmasi "))
+	} else {
+		tabs.add(clrMuted, " Konfirmasi ")
+	}
+	rows = append(rows, tabs.render(w, bar), blank())
+
+	if m.vendorWizardTab == 0 {
+		title := newOcRow(bg)
+		title.addBold(clrText, "  Pilih provider AI")
+		rows = append(rows, title.render(w, bar))
+
+		subtitle := newOcRow(bg)
+		subtitle.add(clrDim, ocTrunc(
+			"  Provider mana yang ingin kamu gunakan?", textW))
+		rows = append(rows, subtitle.render(w, bar), blank())
+
+		if len(m.allProviders) == 0 {
+			r := newOcRow(bg)
+			r.add(clrMuted, "  Belum ada provider tersedia.")
+			rows = append(rows, r.render(w, bar))
+		}
+
+		for i, p := range m.allProviders {
+			rowBG := bg
+			if i == m.vendorCursor {
+				rowBG = ocPanelHi
+			}
+
+			nameRow := newOcRow(rowBG)
+			if i == m.vendorCursor {
+				nameRow.addBold(
+					clrAccent2, fmt.Sprintf("  > %d. ", i+1))
+			} else {
+				nameRow.add(
+					clrDim, fmt.Sprintf("    %d. ", i+1))
+			}
+
+			maxName := textW - 18
+			if maxName < 5 {
+				maxName = 5
+			}
+			nameRow.addBold(clrText, ocTrunc(p.Name, maxName))
+			if i == m.activeIdx {
+				nameRow.addBold(clrUser, "  [aktif]")
+			}
+			rows = append(rows, nameRow.render(w, bar))
+
+			kind := strings.TrimSpace(p.Type)
+			if strings.HasPrefix(strings.ToLower(p.Name), "eliza") {
+				kind = "offline · tanpa API key"
+			} else if kind == "" {
+				kind = "provider AI"
+			}
+
+			model := strings.TrimSpace(p.Model)
+			if model == "" {
+				model = "model belum ditentukan"
+			}
+
+			maxTokens := p.MaxTokens
+			if maxTokens <= 0 {
+				maxTokens = 2000
+			}
+
+			desc := fmt.Sprintf(
+				"      %s · %s · max %d token",
+				kind, model, maxTokens,
+			)
+			descRow := newOcRow(rowBG)
+			descRow.add(clrMuted, ocTrunc(desc, textW))
+			rows = append(rows, descRow.render(w, bar))
+		}
+	} else {
+		title := newOcRow(bg)
+		title.addBold(clrText, "  Konfirmasi provider")
+		rows = append(rows, title.render(w, bar))
+
+		subtitle := newOcRow(bg)
+		subtitle.add(clrDim, ocTrunc(
+			"  Periksa pilihan sebelum mengaktifkannya.", textW))
+		rows = append(rows, subtitle.render(w, bar), blank())
+
+		if len(m.allProviders) > 0 {
+			idx := m.vendorCursor
+			if idx < 0 || idx >= len(m.allProviders) {
+				idx = 0
+			}
+			p := m.allProviders[idx]
+
+			addDetail := func(label, value string) {
+				prefix := "  " + label + ": "
+				r := newOcRow(bg)
+				r.add(clrDim, prefix)
+				available := textW - lipgloss.Width(prefix)
+				r.addBold(clrText, ocTrunc(value, available))
+				rows = append(rows, r.render(w, bar))
+			}
+
+			kind := strings.TrimSpace(p.Type)
+			if strings.HasPrefix(strings.ToLower(p.Name), "eliza") {
+				kind = "offline"
+			} else if kind == "" {
+				kind = "provider AI"
+			}
+
+			maxTokens := p.MaxTokens
+			if maxTokens <= 0 {
+				maxTokens = 2000
+			}
+
+			addDetail("Provider", p.Name)
+			addDetail("Tipe", kind)
+			addDetail("Model", p.Model)
+			addDetail("Max token", fmt.Sprintf("%d", maxTokens))
+			rows = append(rows, blank())
+
+			status := "Enter untuk mengaktifkan provider ini."
+			if idx == m.activeIdx {
+				status = "Provider ini sudah aktif."
+			}
+			r := newOcRow(bg)
+			r.addBold(clrAccent2, ocTrunc("  "+status, textW))
+			rows = append(rows, r.render(w, bar))
+		}
+	}
+
+	rows = append(rows, blank())
+	hint := newOcRow(bg)
+	if m.vendorWizardTab == 0 {
+		hint.add(clrDim, ocTrunc(
+			"  tab konfirmasi · ↑↓ pilih · enter lanjut · esc batal",
+			textW))
+	} else {
+		hint.add(clrDim, ocTrunc(
+			"  tab kembali · enter aktifkan · esc batal",
+			textW))
+	}
+
+	rows = append(rows, hint.render(w, bar), blank())
+	return strings.Join(rows, "\n")
+}
+
 // ---------- footer ----------
 
 func (m Model) ocFooter(w int) string {
 	var left string
 	switch {
+	case m.vendorWizardActive:
+		if m.vendorWizardTab == 0 {
+			left = "  tab konfirmasi   ↑↓ pilih   enter lanjut   esc batal"
+		} else {
+			left = "  tab kembali   enter aktifkan   esc batal"
+		}
 	case m.fileFocus:
 		left = "  " + lipgloss.NewStyle().Foreground(clrUser).Render("● files") + styleDim.Render("  tab  esc")
 	default:

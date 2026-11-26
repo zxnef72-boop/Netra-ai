@@ -134,8 +134,11 @@ type Model struct {
 	choiceActive bool
 	attached     []AttachedFile
 
-	allProviders []Provider
-	activeIdx    int
+	allProviders       []Provider
+	activeIdx          int
+	vendorWizardActive bool
+	vendorWizardTab    int
+	vendorCursor       int
 
 	// Animasi loading (lihat ui_anim.go)
 	frame       int
@@ -580,6 +583,10 @@ func (m Model) update0(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Esc: layer-aware — tutup layer teratas dulu, baru quit
 		if k == "esc" {
+			if m.vendorWizardActive {
+				m.vendorWizardActive = false
+				return m, nil
+			}
 			// PRIORITAS 1: CHOICE widget aktif → cuma cancel
 			if m.choiceActive {
 				m.choiceActive = false
@@ -608,6 +615,66 @@ func (m Model) update0(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if k == "tab" && m.showFiles {
 			m.fileFocus = true
+			return m, nil
+		}
+
+		// Vendor wizard: terpisah dari pilihan A/B/C.
+		if m.vendorWizardActive {
+			switch k {
+			case "up":
+				if m.vendorWizardTab == 0 && m.vendorCursor > 0 {
+					m.vendorCursor--
+				}
+				return m, nil
+
+			case "down":
+				if m.vendorWizardTab == 0 &&
+					m.vendorCursor < len(m.allProviders)-1 {
+					m.vendorCursor++
+				}
+				return m, nil
+
+			case "tab", "shift+tab":
+				m.vendorWizardTab = 1 - m.vendorWizardTab
+				return m, nil
+
+			case "enter":
+				if len(m.allProviders) == 0 {
+					m.vendorWizardActive = false
+					m.messages = append(m.messages, ChatMsg{
+						Role: "error",
+						Text: "Belum ada provider tersedia.",
+					})
+					return m, nil
+				}
+
+				if m.vendorWizardTab == 0 {
+					m.vendorWizardTab = 1
+					return m, nil
+				}
+
+				if m.vendorCursor < 0 ||
+					m.vendorCursor >= len(m.allProviders) {
+					m.vendorCursor = 0
+				}
+
+				selected := m.vendorCursor
+				m.vendorWizardActive = false
+				m.handleVendor([]string{
+					"/vendor", strconv.Itoa(selected),
+				})
+				return m, nil
+
+			case "1", "2", "3", "4", "5",
+				"6", "7", "8", "9":
+				if m.vendorWizardTab == 0 {
+					selected := int(k[0] - '1')
+					if selected < len(m.allProviders) {
+						m.vendorCursor = selected
+					}
+				}
+				return m, nil
+			}
 			return m, nil
 		}
 
@@ -1193,7 +1260,13 @@ func (m *Model) handleVendors() {
 
 func (m *Model) handleVendor(args []string) {
 	if len(args) < 2 {
-		m.handleVendors()
+		m.vendorWizardActive = true
+		m.vendorWizardTab = 0
+		m.vendorCursor = m.activeIdx
+		if m.vendorCursor < 0 ||
+			m.vendorCursor >= len(m.allProviders) {
+			m.vendorCursor = 0
+		}
 		return
 	}
 	target := args[1]
