@@ -172,6 +172,7 @@ func initialModel() (Model, error) {
 			"Tugas utama: bantu bikin kode, debug, jelasin teknologi, review script. " +
 			"Anggap semua permintaan user itu SOAL CODING/TEKNIS kecuali eksplisit minta illegal. " +
 			"Pakai ```fenced``` code block buat code SINGLE FILE. " +
+			"ATURAN FORMAT: Gunakan tabel markdown HANYA untuk perbandingan 2+ item dengan 2+ atribut (misal: fitur vs platform) atau data matriks. JANGAN gunakan tabel untuk narasi, 1 kolom, atau data <3 baris (gunakan list biasa). " +
 			"\n\nPENTING: KALO user minta PROJECT MULTI-FILE (web, app, game, dll yang butuh >1 file), " +
 			"WAJIB pakai format ini buat tiap file (JANGAN ``` biasa):\n" +
 			"[FILE: path/lengkap/dari/root.ext]\n" +
@@ -197,6 +198,7 @@ func initialModel() (Model, error) {
 
 	// Load Lua rules dari ~/.netra-ai/lua-rules/
 	loadLuaRules()
+	LoadLuaState()
 
 	return m, nil
 }

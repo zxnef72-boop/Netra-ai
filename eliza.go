@@ -359,11 +359,6 @@ func elizaReplyCore(input string) string {
 		return gh
 	}
 
-	// === LUA RULES (prioritas paling atas, sebelum entity ack & curhat) ===
-	if reply, ok := matchLuaRules(input, inputRaw); ok && reply != "" {
-		addToContext("eliza", reply)
-		return reply
-	}
 
 	// Cek tutorial DULUAN
 	if tpl, ok := elizaTryTutorial(input); ok {
@@ -376,6 +371,13 @@ func elizaReplyCore(input string) string {
 		addToContext("eliza", "[template dikirim]")
 		return tpl
 	}
+
+	// === LUA RULES (prioritas paling atas, sebelum entity ack & curhat) ===
+	if reply, ok := matchLuaRules(input, inputRaw); ok && reply != "" {
+		addToContext("eliza", reply)
+		return reply
+	}
+
 
 	elizaMemory.KaliChat++
 
@@ -1202,31 +1204,20 @@ func elizaTemplateBaseDir() string {
 
 // elizaFakeStream — fake streaming
 func elizaFakeStream(reply string, ch chan<- StreamChunk) {
-	reply = htmlToANSI(reply) // tag HTML -> ANSI (b, i, a href, dll)
-	defer close(ch)
-	if strings.Contains(reply, "\n") {
-		lines := strings.Split(reply, "\n")
-		for i, line := range lines {
-			words := strings.SplitAfter(line, " ")
-			for _, w := range words {
-				ch <- StreamChunk{Text: w, Provider: "eliza"}
-				time.Sleep(20 * time.Millisecond)
-			}
-			if i < len(lines)-1 {
-				ch <- StreamChunk{Text: "\n", Provider: "eliza"}
-			}
-		}
-		ch <- StreamChunk{Done: true, Provider: "eliza"}
-		return
-	}
-	words := strings.SplitAfter(reply, " ")
-	for _, w := range words {
-		ch <- StreamChunk{Text: w, Provider: "eliza"}
-		time.Sleep(35 * time.Millisecond)
-	}
-	ch <- StreamChunk{Done: true, Provider: "eliza"}
-}
+        reply = htmlToANSI(reply)
+        defer close(ch)
 
+        // Kirim per baris utuh untuk menjaga indentasi & formatting code block
+        lines := strings.Split(reply, "\n")
+        for i, line := range lines {
+                ch <- StreamChunk{Text: line, Provider: "eliza"}
+                if i < len(lines)-1 {
+                        ch <- StreamChunk{Text: "\n", Provider: "eliza"}
+                }
+                time.Sleep(15 * time.Millisecond) // Delay kecil antar baris
+        }
+        ch <- StreamChunk{Done: true, Provider: "eliza"}
+}
 func elizaTryTutorial(input string) (string, bool) {
 	low := strings.ToLower(strings.TrimSpace(input))
 	triggers := []string{"tutorial ", "cara bikin ", "cara buat ", "cara masak ", "resep ", "tutor "}

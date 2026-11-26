@@ -346,6 +346,7 @@ func evalLuaRule(rule LuaRule, input string, inputRaw string) (string, bool) {
 		luaStateStoreMu.Lock()
 		luaStateStore[rule.Name+":"+key] = val
 		luaStateStoreMu.Unlock()
+		SaveLuaState()
 		return 0
 	}))
 

@@ -503,15 +503,10 @@ func (m Model) ocChat(w, h int) string {
 					}
 					lines = append(lines, "")
 				} else {
-					clean := strings.ReplaceAll(seg.Text, "**", "")
-					for _, wl := range ocHardWrap(wrapText(clean, textW), textW) {
-						if strings.TrimSpace(wl) == "" {
-							lines = append(lines, "")
-							continue
-						}
+					if strings.TrimSpace(seg.Text) != "" {
 						anyContent = true
-						lines = append(lines, "   "+styleText.Render(wl))
 					}
+					lines = append(lines, ocRenderNonCode(seg.Text, textW)...)
 				}
 			}
 
@@ -632,4 +627,185 @@ func (m Model) ocAgentChecklist(w int) []string {
 		lines = append(lines, "   "+runS.Render(ocSpin(m.frame))+" "+ocShimmer(m.agentPhase, m.frame, "")+styleDim.Render(ocDots(m.frame)))
 	}
 	return lines
+}
+
+// ocRenderNonCode renders a non-code markdown segment into TUI lines:
+// tables, headings, bullet lists, and plain text. Plain text keeps the
+// existing wrapText/ocHardWrap behavior so nothing regresses.
+func ocRenderNonCode(text string, textW int) []string {
+	var out []string
+	raw := strings.Split(text, "\n")
+	for i := 0; i < len(raw); {
+		t := strings.TrimSpace(raw[i])
+		if len(t) > 1 && strings.HasPrefix(t, "|") && strings.HasSuffix(t, "|") {
+			block := []string{}
+			for i < len(raw) {
+				tt := strings.TrimSpace(raw[i])
+				if len(tt) > 1 && strings.HasPrefix(tt, "|") && strings.HasSuffix(tt, "|") {
+					block = append(block, tt)
+					i++
+				} else {
+					break
+				}
+			}
+			out = append(out, ocRenderTable(block, textW)...)
+			continue
+		}
+		if strings.HasPrefix(t, "#") {
+			lvl := 0
+			for lvl < len(t) && t[lvl] == '#' {
+				lvl++
+			}
+			rest := ocStripInline(strings.TrimSpace(t[lvl:]))
+			if lvl >= 1 && lvl <= 6 && rest != "" {
+				out = append(out, "   "+lipgloss.NewStyle().Bold(true).Foreground(clrAccent2).Render(rest))
+				i++
+				continue
+			}
+		}
+		if (strings.HasPrefix(t, "- ") || strings.HasPrefix(t, "* ")) && len(t) > 2 {
+			content := ocStripInline(t[2:])
+			for _, wl := range ocHardWrap(wrapText(content, textW-2), textW-2) {
+				out = append(out, "   "+styleText.Render("\u2022 "+wl))
+			}
+			i++
+			continue
+		}
+		if t == "" {
+			out = append(out, "")
+			i++
+			continue
+		}
+		clean := ocStripInline(raw[i])
+		for _, wl := range ocHardWrap(wrapText(clean, textW), textW) {
+			out = append(out, "   "+styleText.Render(wl))
+		}
+		i++
+	}
+	return out
+}
+
+// ocRenderTable renders markdown table rows into a bordered block.
+func ocRenderTable(rows []string, textW int) []string {
+	var parsed [][]string
+	for _, r := range rows {
+		inner := strings.Trim(r, "|")
+		cells := strings.Split(inner, "|")
+		cs := make([]string, 0, len(cells))
+		for _, c := range cells {
+			cs = append(cs, strings.TrimSpace(ocStripInline(c)))
+		}
+		allSep := len(cs) > 0
+		for _, c := range cs {
+			if c != "" && strings.Trim(c, "-: ") == "" {
+				continue
+			}
+			allSep = false
+			break
+		}
+		if allSep {
+			continue
+		}
+		parsed = append(parsed, cs)
+	}
+	if len(parsed) == 0 {
+		return nil
+	}
+	maxCols := 0
+	for _, r := range parsed {
+		if len(r) > maxCols {
+			maxCols = len(r)
+		}
+	}
+	widths := make([]int, maxCols)
+	for _, r := range parsed {
+		for j := 0; j < len(r); j++ {
+			if lipgloss.Width(r[j]) > widths[j] {
+				widths[j] = lipgloss.Width(r[j])
+			}
+		}
+	}
+	avail := textW - 3
+	if avail < maxCols*4 {
+		avail = maxCols * 4
+	}
+	sep := (maxCols - 1) * 3
+	natTotal := sep
+	for _, ww := range widths {
+		natTotal += ww
+	}
+	if natTotal > avail {
+		deficit := natTotal - avail
+		for deficit > 0 {
+			maxJ := -1
+			maxV := 4
+			for j := 0; j < maxCols; j++ {
+				if widths[j] > maxV {
+					maxV = widths[j]
+					maxJ = j
+				}
+			}
+			if maxJ == -1 {
+				break
+			}
+			widths[maxJ]--
+			deficit--
+		}
+	}
+
+	total := (maxCols - 1) * 3
+	for _, w := range widths {
+		total += w
+	}
+	border := "   " + strings.Repeat("\u2500", total)
+	out := []string{border}
+	for idx, r := range parsed {
+		parts := make([]string, 0, maxCols)
+		for j := 0; j < maxCols; j++ {
+			cell := ""
+			if j < len(r) {
+				cell = r[j]
+			}
+			cell = ocClip(cell, widths[j])
+			pad := widths[j] - lipgloss.Width(cell)
+			if pad < 0 {
+				pad = 0
+			}
+			cell += strings.Repeat(" ", pad)
+			if idx == 0 {
+				parts = append(parts, lipgloss.NewStyle().Bold(true).Foreground(clrAccent2).Render(cell))
+			} else {
+				parts = append(parts, styleText.Render(cell))
+			}
+		}
+		out = append(out, "   "+strings.Join(parts, " \u2502 "))
+	}
+	out = append(out, border)
+	return out
+}
+
+// ocClip truncates a plain string to a display width.
+func ocClip(s string, w int) string {
+	if w <= 0 || lipgloss.Width(s) <= w {
+		return s
+	}
+	r := []rune(s)
+	cur := 0
+	for i, ch := range r {
+		cw := lipgloss.Width(string(ch))
+		if cur+cw > w-1 {
+			return string(r[:i]) + "\u2026"
+		}
+		cur += cw
+	}
+	return s
+}
+
+// ocStripInline removes markdown inline markers WITHOUT adding ANSI,
+// so wrapText/ocHardWrap (ANSI-blind) stay correct.
+func ocStripInline(s string) string {
+	s = strings.ReplaceAll(s, "**", "")
+	s = strings.ReplaceAll(s, "`", "")
+	s = strings.ReplaceAll(s, "*", "")
+	return s
 }

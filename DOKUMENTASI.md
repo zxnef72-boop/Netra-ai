@@ -202,3 +202,8 @@ API key bocor: revoke di dashboard, generate baru.
 ---
 
 Dibuat: 12 Oktober 2026
+
+## Fitur Terbaru (Update)
+- **Renderer Markdown TUI:** Output AI dan plugin Lua sekarang bisa merender tabel bergaris (`│`, `─`), heading, dan list secara otomatis (gaya Claude Code).
+- **Persistent Memory (Ingatan Permanen):** Eliza/Lua sekarang menyimpan state (nama, topik) ke disk (`~/.netra-ai/lua_state.json`). Tidak lagi "amnesia" saat aplikasi di-restart.
+- **Parallel OSINT Tools:** `portscan.lua` dan tools OSINT lainnya kini berjalan secara paralel (jauh lebih cepat) dan outputnya terstruktur rapi dalam tabel.

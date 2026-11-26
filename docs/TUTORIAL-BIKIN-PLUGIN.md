@@ -13,6 +13,8 @@ Plugin Lua = fitur tambahan buat Netra. Gak perlu compile Go, cukup tulis file .
 | tcp_connect(host, port) | Cek TCP port |
 | get_env(name) | Baca env var |
 | file_read(path) | Baca file |
+| print_table(headers, rows) | Render tabel markdown otomatis |
+| tcp_probe_many(host, ports) | Cek port TCP paralel (cepat) |
 | proot_run(distro, cmd) | Jalanin di sandbox |
 | proot_list() | List distro terinstall |
 | sleep(ms) | Delay |

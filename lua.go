@@ -86,6 +86,39 @@ func (m *Model) handleLua(args []string) {
 	L.SetGlobal("args", argsTable)
 	L.SetGlobal("cwd", lua.LString(m.currentDir))
 
+	// print_table(headers, rows) - render tabel markdown
+	L.SetGlobal("print_table", L.NewFunction(func(L *lua.LState) int {
+		headersTbl := L.Get(1).(*lua.LTable)
+		rowsTbl := L.Get(2).(*lua.LTable)
+
+		var md strings.Builder
+		// Header row
+		md.WriteString("| ")
+		for i := 1; i <= headersTbl.Len(); i++ {
+			md.WriteString(headersTbl.RawGetInt(i).String())
+			md.WriteString(" | ")
+		}
+		md.WriteString("\n| ")
+		for i := 1; i <= headersTbl.Len(); i++ {
+			md.WriteString("--- | ")
+		}
+		md.WriteString("\n")
+
+		// Data rows
+		for i := 1; i <= rowsTbl.Len(); i++ {
+			row := rowsTbl.RawGetInt(i).(*lua.LTable)
+			md.WriteString("| ")
+			for j := 1; j <= row.Len(); j++ {
+				md.WriteString(row.RawGetInt(j).String())
+				md.WriteString(" | ")
+			}
+			md.WriteString("\n")
+		}
+
+		output.WriteString(md.String())
+		return 0
+	}))
+
 	L.SetGlobal("http_get", L.NewFunction(func(L *lua.LState) int {
 		url := L.CheckString(1)
 		body, status, err := luaHTTPGet(url)
@@ -381,6 +414,43 @@ func (m *Model) handleLua(args []string) {
 	}))
 
 	// tcp_send(host, port, data, timeout_ms) → (response_string, error_string)
+	// tcp_probe_many — cek TCP port paralel, return table {port, open}.
+	L.SetGlobal("tcp_probe_many", L.NewFunction(func(L *lua.LState) int {
+		host := L.CheckString(1)
+		portsTable := L.CheckTable(2)
+		timeoutMs := L.OptInt(3, 1000)
+		var ports []int
+		portsTable.ForEach(func(_, v lua.LValue) {
+			ports = append(ports, int(v.(lua.LNumber)))
+		})
+		results := make([]bool, len(ports))
+		var wg sync.WaitGroup
+		sem := make(chan struct{}, 20)
+		for i, p := range ports {
+			wg.Add(1)
+			sem <- struct{}{}
+			go func(i, p int) {
+				defer wg.Done()
+				defer func() { <-sem }()
+				addr := net.JoinHostPort(host, strconv.Itoa(p))
+				conn, err := net.DialTimeout("tcp", addr, time.Duration(timeoutMs)*time.Millisecond)
+				if err == nil {
+					conn.Close()
+					results[i] = true
+				}
+			}(i, p)
+		}
+		wg.Wait()
+		outTbl := L.NewTable()
+		for i, p := range ports {
+			row := L.NewTable()
+			row.RawSetString("port", lua.LNumber(p))
+			row.RawSetString("open", lua.LBool(results[i]))
+			outTbl.Append(row)
+		}
+		L.Push(outTbl)
+		return 1
+	}))
 	L.SetGlobal("tcp_send", L.NewFunction(func(L *lua.LState) int {
 		host := L.CheckString(1)
 		port := L.CheckInt(2)

@@ -1,5 +1,5 @@
 -- linkfinder.lua — extract endpoint/URL dari file JS/HTML
--- Pakai: /lua lua/linkfinder.lua <file|url> [--json]
+-- Pakai: /lua lua/linkfinder.lua <file|url>
 -- Contoh: /lua lua/linkfinder.lua app.js
 --         /lua lua/linkfinder.lua https://example.com/script.js
 --         /lua lua/linkfinder.lua https://example.com
@@ -121,38 +121,38 @@ if #clean == 0 then
     return
 end
 
--- Group by kind
-local groups = {url = {}, path = {}, api = {}, fetch = {}, file = {}, domain = {}}
+-- Sort: api dulu, lalu url
+local kind_rank = {api=0, url=1, path=2, fetch=3, file=4, domain=5}
+table.sort(clean, function(a, b)
+    local ra, rb = kind_rank[a.kind] or 9, kind_rank[b.kind] or 9
+    if ra ~= rb then return ra < rb end
+    return a.url < b.url
+end)
+
+-- Hitung per-kind dari clean UTUH (buat summary jujur)
+local counts = {}
 for _, item in ipairs(clean) do
-    if groups[item.kind] then
-        table.insert(groups[item.kind], item.url)
-    end
+    counts[item.kind] = (counts[item.kind] or 0) + 1
 end
+
+-- Tabel dibatasi 50 baris (api prioritas atas), sisanya di-summary
+local MAX_ROWS = 50
+local rows = {}
+for i = 1, math.min(#clean, MAX_ROWS) do
+    local item = clean[i]
+    table.insert(rows, {item.url, (item.kind or "?"):upper()})
+end
+
+print_table({"URL", "Type"}, rows)
 
 local order = {"api", "url", "path", "fetch", "file", "domain"}
-local labels = {
-    api = "API ENDPOINTS",
-    url = "FULL URLS",
-    path = "ABSOLUTE PATHS",
-    fetch = "FETCH/AXIOS CALLS",
-    file = "STATIC FILES",
-    domain = "DOMAINS",
-}
-
-for _, kind in ipairs(order) do
-    local items = groups[kind]
-    if #items > 0 then
-        print("--- " .. labels[kind] .. " (" .. #items .. ") ---")
-        local max = 30
-        for i, url in ipairs(items) do
-            if i > max then
-                print("  ... (" .. (#items - max) .. " lainnya)")
-                break
-            end
-            print("  " .. url)
-        end
-        print("")
+local parts = {}
+for _, k in ipairs(order) do
+    if counts[k] then
+        table.insert(parts, k:upper() .. ": " .. counts[k])
     end
 end
-
-print("=== TOTAL: " .. #clean .. " link ===")
+print(string.format("\nTotal: %d link | %s", #clean, table.concat(parts, " | ")))
+if #clean > MAX_ROWS then
+    print(string.format("(%d lainnya tidak ditampilkan di tabel)", #clean - MAX_ROWS))
+end
