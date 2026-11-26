@@ -1,160 +1,230 @@
 # Netra CLI
 
-Toolkit OSINT + AI + builder yang jalan di terminal.
+Netra CLI adalah toolkit berbasis terminal yang menggabungkan fitur AI, OSINT, pengelolaan file, plugin Lua, dan berbagai alat builder dalam satu aplikasi.
 
-Dibuat dengan Go (mesin) + Lua (otak) — **cross-platform**: jalan di Android (Termux), Linux, Windows (native + WSL), macOS. Satu binary, gak butuh runtime.
+Netra dikembangkan menggunakan Go dan Lua. Aplikasi ini ditujukan untuk beberapa platform, termasuk Android melalui Termux, Linux, Windows, dan macOS. Fitur tertentu mungkin memerlukan program atau dependensi tambahan sesuai sistem operasi yang digunakan.
 
-Ringan, cepat, gak ada dependency ribet.
+## Fitur Utama
 
-## Fitur
+### AI dan percakapan
+- Eliza: mode percakapan offline yang dapat digunakan tanpa API key.
+- Dukungan beberapa provider AI, termasuk Gemini, Groq, OpenRouter, dan Ollama, sesuai konfigurasi.
+- Sistem plugin Lua untuk menambahkan kemampuan baru.
+- Persistent memory dan personality system.
 
-Builder:
-- /build apk <url> <nama>
-- /build html <folder> <nama> [--fullscreen]
-- /build native <data.json> <nama>
-- /build exe <folder> <nama>
-- /build exe-win <folder> <nama>
-- /build exe-portable <folder> <nama> (alias: /build portable)
+### Agent
+Agent dapat membantu mengerjakan tugas di dalam workspace, seperti membaca dan menulis file, melihat isi direktori, serta menjalankan perintah.
 
-OSINT:
-- /apkscan <file.apk>
-- /sandbox <cmd>
-- /lua <file.lua>
-- /baca <url>
-- /search <query>
+Perintah yang tersedia:
+- `/agent <prompt>` — memulai tugas agent.
+- `/agent-unsafe on` — mengaktifkan izin operasi tulis dan eksekusi perintah.
 
-AI:
-- Eliza mode (offline, tanpa API)
-- Plugin system Lua (natural language)
-- Multi-provider (Groq, OpenRouter, Ollama). Eliza mode offline tersedia tanpa API.
+Agent menggunakan workspace berikut secara default:
+- Termux: `/sdcard/AiNef`
+- Platform lain: `~/netra-projects`
 
-TUI:
-- File manager (Ctrl+B)
-- Persistent memory
-- Personality system
+Lokasi workspace dapat diubah melalui variabel lingkungan `NETRA_WORKSPACE`.
 
-### Agent Otonom
+Agent memiliki pembatasan output tool dan mekanisme penanganan rate limit. Gunakan izin eksekusi perintah dengan hati-hati, terutama ketika bekerja pada file penting.
 
-Agent yang bisa baca, tulis, list, dan jalanin command sendiri. Loop sampai selesai.
+### Builder
+Netra menyediakan beberapa pilihan builder:
 
-- `/agent <prompt>` — jalanin agent
-- `/agent-unsafe on` — izinin write + run command
-- Tools: read_file, write_file, list_dir, run_command
-- Progres live: tiap langkah tampil sebagai checklist (spinner jalan, label OK atau GAGAL dengan detail)
-- Safety: workspace agent mengikuti platform - Termux /sdcard/AiNef, lainnya ~/netra-projects (override env NETRA_WORKSPACE)
-- cwd agent: kalau currentDir di luar workspace, otomatis jatuh ke workspace
-- Retry 429: baca header Retry-After atau teks "try again in ...", tunggu maksimal 45 detik, maksimal 2 percobaan
-- Penjaga tulis ulang: write_file dengan isi identik versi disk dibalas OK tanpa tulis ulang
-- Output per tool call dibatasi 5-8KB
+| Perintah | Fungsi |
+|---|---|
+| `/build apk <url> <nama>` | Membuat APK dari URL |
+| `/build apkfast <url> <nama>` | Membuat APK menggunakan template |
+| `/build html <folder> <nama>` | Membuat APK dari folder HTML lokal |
+| `/build native <data.json> <nama>` | Membuat APK native dari data JSON |
+| `/build exe <folder> <nama>` | Membuat installer Windows |
+| `/build exe-win <folder> <nama>` | Membuat installer Windows |
+| `/build exe-portable <folder> <nama>` | Membuat EXE portable |
+| `/build portable <folder> <nama>` | Alias untuk `exe-portable` |
 
-Butuh provider OpenAI-compatible (Groq, OpenRouter, Ollama). Belum support Gemini.
+Mode `--fullscreen` tersedia untuk builder APK dari URL dan folder HTML.
 
-### Build APK dari HTML (tanpa Java)
+### APK dari HTML
+Perintah `/build html` membuat APK dari folder HTML lokal tanpa perlu menjalankan proses kompilasi Java pada saat build. File web dimasukkan ke dalam aplikasi melalui template APK yang sudah disiapkan.
 
-`/build html <folder> <nama> [--fullscreen]` bikin APK offline dari folder HTML, tanpa JDK/aapt/d8.
-Pakai template `base.apk` yang ditanam di binary: file masuk ke `assets/www/`, lalu tanda tangan ulang (pure Go).
-Template (kode Java-nya) ada di `template-src/`, dibuild ulang sekali pakai `build_template.sh`.
-Tombol "Pilih file" di halaman web didukung; "Pilih folder" (showDirectoryPicker/webkitdirectory) belum, WebView Android tidak mendukung.
+Folder sumber harus memiliki `index.html` atau `index.htm`. Mode fullscreen juga tersedia.
 
-### Build EXE Portable (self-extract)
+Beberapa API pemilih file dan folder pada browser mungkin tidak didukung oleh WebView Android.
 
-`/build exe-portable <folder> <nama>` (atau `/build portable`) bikin satu .exe Windows mandiri dari folder HTML, tanpa installer dan tanpa MinGW atau makensis.
-Satu `go build` dengan `GOOS=windows CGO_ENABLED=0` menghasilkan satu .exe yang membawa HTML lewat `go:embed`.
-Saat dijalankan di Windows, .exe mengekstrak payload ke `%TEMP%\netra-<nama>-<id>` lalu membuka `index.html` lewat Edge atau Chrome app mode.
-Output: `~/netra-projects/exe-output/<nama>.exe` (atau `NETRA_WORKSPACE/exe-output`).
-Butuh Edge atau Chrome terpasang di PC. WebView2 belum dikerjakan.
+### EXE portable
+Perintah `/build exe-portable` mengemas aplikasi HTML menjadi satu file EXE Windows.
+
+Saat dijalankan, aplikasi mengekstrak file web ke direktori sementara Windows, lalu membukanya menggunakan Edge atau Chrome dalam mode aplikasi.
+
+Browser yang didukung harus sudah terpasang. WebView2 belum menjadi bagian dari implementasi ini.
+
+Output secara default disimpan di:
+`~/netra-projects/exe-output/`
+
+Lokasi workspace dapat disesuaikan melalui `NETRA_WORKSPACE`.
+
+### OSINT dan utilitas
+- `/apkscan <file.apk>` — memeriksa file APK.
+- `/sandbox <perintah>` — menjalankan perintah melalui backend sandbox yang tersedia.
+- `/lua <file.lua>` — menjalankan file Lua.
+- `/baca <url>` — membaca konten dari URL.
+- `/search <query>` — melakukan pencarian.
+
+Gunakan fitur OSINT hanya pada file, sistem, dan layanan yang memang boleh kamu periksa.
 
 ### HTML Toolkit
+HTML Toolkit menyediakan beberapa mode pengolahan halaman web:
 
-6 mode buat fetch + olah HTML:
+- `html tema <url>` — mengambil dan membersihkan HTML.
+- `html asli <url>` — mengambil HTML asli dan menambahkan base URL.
+- `html link <url>` — mengambil daftar tautan.
+- `html info <url>` — mengambil metadata halaman.
+- `html offline <url>` — membuat salinan satu halaman untuk penggunaan offline.
+- `html crawl <url>` — mengambil beberapa halaman dalam batas yang ditentukan aplikasi.
 
-- html tema <url> — fetch + bersihin (buang script/style/svg)
-- html asli <url> — fetch mentah + inject base href
-- html link <url> — extract semua link
-- html info <url> — extract metadata
-- html offline <url> — snapshot 1 file (inline asset, offline total)
-- html crawl <url> — multi-page mirror (max 10 halaman)
-
-Output: /sdcard/AiNef/
+Output HTML Toolkit secara default disimpan di `/sdcard/AiNef/` pada lingkungan yang menggunakan lokasi tersebut.
 
 ### GitHub
-
-- github cari <keyword> — cari repo (by stars, 5 teratas)
-- github ambil <owner>/<repo>/<path> — fetch file raw
+- `github cari <keyword>` — mencari repositori.
+- `github ambil <owner>/<repo>/<path>` — mengambil isi file dari repositori.
 
 ### Direct Handlers
+Netra juga menyediakan beberapa perintah berbasis bahasa alami, antara lain:
+- Informasi harga Bitcoin dan aset kripto.
+- Informasi waktu di kota tertentu.
+- Konversi mata uang.
+- Pencarian arti dan sinonim kata.
+- Kutipan motivasi.
+- Penjelasan topik melalui Wikipedia.
 
-- harga bitcoin — CoinGecko
-- jam di tokyo — Go native (offline)
-- kurs usd ke idr — frankfurter.dev
-- arti kata <kata> — dictionaryapi.dev
-- sinonim <kata> — Datamuse
-- quote motivasi — ZenQuotes
-- apa itu <topik> — Wikipedia (ID + EN fallback)
+Ketersediaan beberapa layanan bergantung pada koneksi internet dan layanan pihak ketiga.
 
 ### Ndock
+Ndock menyediakan perintah untuk mengelola lingkungan kerja berbasis sistem yang tersedia pada platform pengguna.
 
-Docker-like via proot-distro. Auto-detect backend: proot/docker/wsl.
+Perintah yang didokumentasikan meliputi:
+- `ndock pull <nama> <url>`
+- `ndock run <nama> <perintah>`
+- `ndock ps`
+- `ndock logs`
+- `ndock inspect`
+- `ndock rm`
 
-- ndock pull <name> <url>
-- ndock run <name> <cmd>
-- ndock ps / logs / inspect / rm
-- Protect: alpine, netra-sandbox
+Backend dan dependensinya mengikuti implementasi serta dukungan platform.
 
 ### Linkfinder
+Gunakan `/linkfinder <file|url>` untuk mengambil URL atau endpoint dari sumber yang diberikan.
 
-- /linkfinder <file|url> — extract URL/endpoint
+## Sandbox
 
----
+Netra memilih backend sandbox berdasarkan sistem operasi dan ketersediaan program pendukung.
+
+| Platform | Backend |
+|---|---|
+| Linux | Bubblewrap sebagai pilihan utama |
+| Linux / macOS | Docker sebagai alternatif jika tersedia dan siap digunakan |
+| Termux | Proot-Distro melalui mode fallback yang diizinkan |
+| Windows | WSL melalui mode fallback yang diizinkan |
+
+Bubblewrap dan Docker menyediakan pembatasan isolasi yang berbeda. Proot-Distro dan WSL bukan container khusus Netra dan tidak memberikan isolasi kernel seperti container atau namespace Linux.
+
+Jika backend yang memenuhi syarat tidak tersedia, Netra tidak akan menjalankan perintah sebagai shell host biasa.
 
 ## Instalasi
 
-Netra jalan di mana aja yang ada Go 1.21+.
+Netra membutuhkan Go **1.25 atau lebih baru** untuk proses kompilasi.
 
 ### Termux (Android)
 
-    pkg install golang git proot-distro
-    git clone https://github.com/zxnef72-boop/netra-ai.git
-    cd netra-ai
-    go build -o netra-ai-bin .
-    ./netra-ai-bin
+Pasang dependensi dasar:
 
-### Linux / macOS / WSL
+```bash
+pkg update
+pkg install golang git proot-distro
+```
 
-    git clone https://github.com/zxnef72-boop/netra-ai.git
-    cd netra-ai
-    go build -o netra-ai .
-    ./netra-ai
+Unduh dan kompilasi Netra:
 
-### Windows (native)
+```bash
+git clone https://github.com/zxnef72-boop/netra-ai.git
+cd netra-ai
+go build -o netra-ai-bin .
+./netra-ai-bin
+```
 
-    git clone https://github.com/zxnef72-boop/netra-ai.git
-    cd netra-ai
-    go build -o netra-ai.exe .
-    .\netra-ai.exe
+### Linux, macOS, dan WSL
 
-Panduan lengkap per-OS: [docs/TUTORIAL-INSTALL.md](docs/TUTORIAL-INSTALL.md)
+Pastikan Go 1.25 atau lebih baru sudah terpasang.
 
-## Setup AI (opsional)
+```bash
+git clone https://github.com/zxnef72-boop/netra-ai.git
+cd netra-ai
+go build -o netra-ai .
+./netra-ai
+```
 
-Isi API key di config.json. Provider yang didukung:
-- Gemini (gratis) - ai.google.dev
-- Groq (gratis) - console.groq.com
-- OpenRouter - openrouter.ai
-- Ollama (lokal) - ollama.com
+Beberapa fitur memerlukan program tambahan. Contohnya, sandbox Linux menggunakan Bubblewrap sebagai backend utama dan dapat menggunakan Docker jika memenuhi persyaratan.
 
-## Contoh Pakai
+### Windows
 
-    check crypto btc
-    harga ethereum
-    /build html ~/project MyApp --fullscreen
-    /build exe-portable ~/project MyApp
-    /sandbox nmap -F 192.168.1.1
-    /baca fotosintesis id.wikipedia.org
+Pastikan Go 1.25 atau lebih baru sudah terpasang.
 
-## Privacy
+```powershell
+git clone https://github.com/zxnef72-boop/netra-ai.git
+cd netra-ai
+go build -o netra-ai.exe .
+.\netra-ai.exe
+```
 
-Chat dengan AI dikirim ke provider yang kamu pilih. API key disimpan lokal. Eliza mode offline 100% lokal.
+Panduan instalasi per platform tersedia di [Tutorial Instalasi](docs/TUTORIAL-INSTALL.md).
+
+## Konfigurasi Provider AI
+
+Penggunaan provider AI online bersifat opsional. Netra dapat dijalankan menggunakan Eliza tanpa API key.
+
+Konfigurasi provider disimpan dalam `config.json`. Contoh format tersedia di `config.example.json`.
+
+Jangan memasukkan API key asli ke repositori atau membagikannya kepada orang lain. Simpan konfigurasi pribadi secara lokal.
+
+Untuk melihat provider yang tersedia:
+
+```text
+/vendors
+```
+
+Untuk memilih provider:
+
+```text
+/vendor
+```
+
+Kamu juga dapat memilih provider berdasarkan nomor atau nama, misalnya `/vendor 1`.
+
+## Contoh Penggunaan
+
+```text
+harga bitcoin
+jam di tokyo
+arti kata fotosintesis
+/build html ~/project MyApp --fullscreen
+/build exe-portable ~/project MyApp
+/sandbox pwd
+/sandbox ls -la
+/baca https://id.wikipedia.org/wiki/Fotosintesis
+```
+
+## Privasi
+
+- Percakapan dengan provider AI online dikirim ke layanan provider yang dipilih.
+- API key disimpan dalam konfigurasi lokal.
+- Eliza berjalan secara offline.
+- Periksa isi file sebelum membagikannya atau menjalankan perintah yang dapat mengubah data.
+
+## Dokumentasi
+
+- [Dokumentasi Utama](DOKUMENTASI.md)
+- [Tutorial Instalasi](docs/TUTORIAL-INSTALL.md)
+- [Tutorial Membuat Plugin](docs/TUTORIAL-BIKIN-PLUGIN.md)
+- [Tutorial Build APK](docs/TUTORIAL-BUILD-APK.md)
 
 ## Lisensi
 
