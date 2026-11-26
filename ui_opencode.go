@@ -648,7 +648,7 @@ func ocRenderNonCode(text string, textW int) []string {
 					break
 				}
 			}
-			out = append(out, ocRenderTable(block, textW)...)
+			out = append(out, ocRenderTable(block, textW, "")...)
 			continue
 		}
 		if strings.HasPrefix(t, "#") {
@@ -658,6 +658,25 @@ func ocRenderNonCode(text string, textW int) []string {
 			}
 			rest := ocStripInline(strings.TrimSpace(t[lvl:]))
 			if lvl >= 1 && lvl <= 6 && rest != "" {
+				if i+1 < len(raw) {
+					nt := strings.TrimSpace(raw[i+1])
+					if len(nt) > 1 && strings.HasPrefix(nt, "|") && strings.HasSuffix(nt, "|") {
+						tblock := []string{}
+						j := i + 1
+						for j < len(raw) {
+							tt := strings.TrimSpace(raw[j])
+							if len(tt) > 1 && strings.HasPrefix(tt, "|") && strings.HasSuffix(tt, "|") {
+								tblock = append(tblock, tt)
+								j++
+							} else {
+								break
+							}
+						}
+						out = append(out, ocRenderTable(tblock, textW, rest)...)
+						i = j
+						continue
+					}
+				}
 				out = append(out, "   "+lipgloss.NewStyle().Bold(true).Foreground(clrAccent2).Render(rest))
 				i++
 				continue
@@ -685,8 +704,9 @@ func ocRenderNonCode(text string, textW int) []string {
 	return out
 }
 
-// ocRenderTable renders markdown table rows into a bordered block.
-func ocRenderTable(rows []string, textW int) []string {
+// ocRenderTable renders markdown table rows into a heavy-line panel.
+// title (opsional) dipasang di garis atas panel.
+func ocRenderTable(rows []string, textW int, title string) []string {
 	var parsed [][]string
 	for _, r := range rows {
 		inner := strings.Trim(r, "|")
@@ -725,7 +745,8 @@ func ocRenderTable(rows []string, textW int) []string {
 			}
 		}
 	}
-	avail := textW - 3
+	// 3 spasi indent + dinding kiri/kanan + 1 spasi padding tiap sisi = 7
+	avail := textW - 7
 	if avail < maxCols*4 {
 		avail = maxCols * 4
 	}
@@ -757,8 +778,33 @@ func ocRenderTable(rows []string, textW int) []string {
 	for _, w := range widths {
 		total += w
 	}
-	border := "   " + strings.Repeat("\u2500", total)
-	out := []string{border}
+	if title != "" {
+		if avail > 1 {
+			title = ocClip(title, avail-1)
+		}
+		// panel minimal selebar judul: lebarkan kolom terakhir kalau kependekan
+		if need := lipgloss.Width(title) + 1 - total; need > 0 {
+			widths[maxCols-1] += need
+			total += need
+		}
+	}
+	frameW := total + 2
+	fs := lipgloss.NewStyle().Foreground(clrAccent)
+	var top string
+	if title != "" {
+		tw := lipgloss.Width(title)
+		top = fs.Render("┏━ ") +
+			lipgloss.NewStyle().Bold(true).Foreground(clrAccent2).Render(title) +
+			fs.Render(" "+strings.Repeat("━", frameW-tw-3)+"┓")
+	} else {
+		top = fs.Render("┏" + strings.Repeat("━", frameW) + "┓")
+	}
+	mid := fs.Render("┣" + strings.Repeat("━", frameW) + "┫")
+	bot := fs.Render("┗" + strings.Repeat("━", frameW) + "┛")
+	wall := fs.Render("┃")
+	colSep := styleDim.Render(" │ ")
+
+	out := []string{"   " + top}
 	for idx, r := range parsed {
 		parts := make([]string, 0, maxCols)
 		for j := 0; j < maxCols; j++ {
@@ -778,9 +824,12 @@ func ocRenderTable(rows []string, textW int) []string {
 				parts = append(parts, styleText.Render(cell))
 			}
 		}
-		out = append(out, "   "+strings.Join(parts, " \u2502 "))
+		out = append(out, "   "+wall+" "+strings.Join(parts, colSep)+" "+wall)
+		if idx == 0 && len(parsed) > 1 {
+			out = append(out, "   "+mid)
+		}
 	}
-	out = append(out, border)
+	out = append(out, "   "+bot)
 	return out
 }
 
