@@ -18,17 +18,17 @@ import (
 
 // Colors
 var (
-	clrDim      = lipgloss.Color("#565f89")
-	clrMuted    = lipgloss.Color("#9aa5ce")
-	clrText     = lipgloss.Color("#c0caf5")
-	clrAccent   = lipgloss.Color("#bb9af7")
-	clrAccent2  = lipgloss.Color("#7aa2f7")
-	clrUser     = lipgloss.Color("#9ece6a")
-	clrCode     = lipgloss.Color("#e0af68")
-	clrCodeNum  = lipgloss.Color("#414868")
-	clrErr      = lipgloss.Color("#f7768e")
-	clrBorderHi = lipgloss.Color("#7aa2f7")
-	clrDir      = lipgloss.Color("#7dcfff")
+	clrDim      = lipgloss.Color("#858585")
+	clrMuted    = lipgloss.Color("#A0A0A0")
+	clrText     = lipgloss.Color("#D4D4D4")
+	clrAccent   = lipgloss.Color("#C586C0")
+	clrAccent2  = lipgloss.Color("#569CD6")
+	clrUser     = lipgloss.Color("#4EC9B0")
+	clrCode     = lipgloss.Color("#CE9178")
+	clrCodeNum  = lipgloss.Color("#858585")
+	clrErr      = lipgloss.Color("#F44747")
+	clrBorderHi = lipgloss.Color("#569CD6")
+	clrDir      = lipgloss.Color("#4FC1FF")
 	clrBgSide   = lipgloss.Color("#0d0d14")
 )
 

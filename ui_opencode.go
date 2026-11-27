@@ -636,6 +636,12 @@ func (m Model) ocChat(w, h int) string {
 			anyContent := false
 			for _, seg := range segments {
 				if seg.IsCode {
+					shortLines := strings.Split(strings.TrimRight(seg.Text, "\n"), "\n")
+					if len(shortLines) <= 12 {
+						anyContent = true
+						lines = append(lines, ocRenderShortCode(seg.Lang, seg.Text, textW)...)
+						continue
+					}
 					anyContent = true
 					label := seg.Lang
 					if label == "" {
@@ -1035,4 +1041,60 @@ func ocStripInline(s string) string {
 	s = strings.ReplaceAll(s, "`", "")
 	s = strings.ReplaceAll(s, "*", "")
 	return s
+}
+
+// ocRenderShortCode renders short code blocks in a compact labeled panel.
+func ocRenderShortCode(lang, code string, textW int) []string {
+	label := strings.TrimSpace(lang)
+	if label == "" {
+		label = "code"
+	}
+
+	contentW := textW - 6
+	if contentW < 12 {
+		contentW = 12
+	}
+
+	label = ocClip(label, contentW-2)
+	frameW := contentW + 4
+	fillW := frameW - lipgloss.Width(label) - 5
+	if fillW < 1 {
+		fillW = 1
+	}
+
+	border := lipgloss.NewStyle().Foreground(ocBarCode)
+	title := lipgloss.NewStyle().Bold(true).Foreground(clrAccent2)
+
+	top := border.Render("┌─") +
+		title.Render(" "+label+" ") +
+		border.Render(strings.Repeat("─", fillW)+"┐")
+
+	bottom := border.Render("└" + strings.Repeat("─", frameW-2) + "┘")
+	wall := border.Render("│")
+
+	out := []string{"   " + top}
+
+	for _, line := range strings.Split(strings.TrimRight(code, "\n"), "\n") {
+		wrapped := wrapCodeLine(line, contentW)
+		if len(wrapped) == 0 {
+			wrapped = []string{""}
+		}
+
+		for _, part := range wrapped {
+			if lipgloss.Width(part) > contentW {
+				part = ocClip(part, contentW)
+			}
+			pad := contentW - lipgloss.Width(part)
+			if pad < 0 {
+				pad = 0
+			}
+
+			highlighted := indentAndHighlight(part, lang)
+			out = append(out, "   "+wall+" "+highlighted+
+				strings.Repeat(" ", pad)+" "+wall)
+		}
+	}
+
+	out = append(out, "   "+bottom)
+	return out
 }

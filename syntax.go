@@ -12,21 +12,21 @@ import (
 
 // Palet warna ala tokyonight/vscode
 var tokenColors = map[string]lipgloss.Color{
-	"keyword":   lipgloss.Color("#c678dd"),
-	"string":    lipgloss.Color("#98c379"),
-	"comment":   lipgloss.Color("#5c6370"),
-	"number":    lipgloss.Color("#d19a66"),
-	"function":  lipgloss.Color("#61afef"),
-	"class":     lipgloss.Color("#e5c07b"),
-	"operator":  lipgloss.Color("#56b6c2"),
-	"tag":       lipgloss.Color("#e06c75"),
-	"attr":      lipgloss.Color("#d19a66"),
-	"builtin":   lipgloss.Color("#e5c07b"),
-	"punct":     lipgloss.Color("#abb2bf"),
-	"decorator": lipgloss.Color("#e5c07b"),
-	"variable":  lipgloss.Color("#e06c75"),
-	"constant":  lipgloss.Color("#d19a66"),
-	"text":      lipgloss.Color("#c0caf5"),
+	"keyword":   lipgloss.Color("#C586C0"),
+	"string":    lipgloss.Color("#CE9178"),
+	"comment":   lipgloss.Color("#6A9955"),
+	"number":    lipgloss.Color("#B5CEA8"),
+	"function":  lipgloss.Color("#DCDCAA"),
+	"class":     lipgloss.Color("#4EC9B0"),
+	"operator":  lipgloss.Color("#D4D4D4"),
+	"tag":       lipgloss.Color("#569CD6"),
+	"attr":      lipgloss.Color("#9CDCFE"),
+	"builtin":   lipgloss.Color("#4EC9B0"),
+	"punct":     lipgloss.Color("#D4D4D4"),
+	"decorator": lipgloss.Color("#DCDCAA"),
+	"variable":  lipgloss.Color("#9CDCFE"),
+	"constant":  lipgloss.Color("#4FC1FF"),
+	"text":      lipgloss.Color("#D4D4D4"),
 }
 
 // chromaToPalette — map chroma token type ke key palet kita.
