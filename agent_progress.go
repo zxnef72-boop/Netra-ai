@@ -37,7 +37,7 @@ type agentStep struct {
 func agentLabel(tool string, args map[string]interface{}, cwd string) string {
 	var s string
 	switch tool {
-	case "read_file", "write_file", "list_dir":
+	case "read_file", "write_file", "edit_file", "list_dir":
 		s, _ = args["path"].(string)
 		if s != "" && filepath.IsAbs(s) {
 			if rel, err := filepath.Rel(cwd, s); err == nil && !strings.HasPrefix(rel, "..") {
@@ -62,6 +62,8 @@ func agentVerb(tool string) string {
 		return "baca"
 	case "write_file":
 		return "tulis"
+	case "edit_file":
+		return "edit"
 	case "list_dir":
 		return "lihat"
 	case "run_command":
@@ -89,7 +91,7 @@ func agentOutcome(tool, result string) (bool, string) {
 		return false, strings.Trim(first, "[]")
 	}
 	switch tool {
-	case "write_file":
+	case "write_file", "edit_file":
 		if mm := agentByteRe.FindStringSubmatch(r); mm != nil {
 			n, _ := strconv.Atoi(mm[1])
 			return true, agentSize(n)

@@ -20,6 +20,7 @@ func (m *Model) handleAgent(args []string) {
 	}
 
 	prompt := strings.Join(args[1:], " ")
+	history := append([]ChatMsg(nil), m.messages...)
 	m.messages = append(m.messages, ChatMsg{Role: "user", Text: "AGENT: " + prompt})
 	m.messages = append(m.messages, ChatMsg{Role: "assistant", Text: ""})
 	m.streaming = true
@@ -40,7 +41,7 @@ func (m *Model) handleAgent(args []string) {
 			ch <- StreamChunk{Text: agentEncode(kind, tool, label, detail), Provider: "agent-step"}
 		}
 		agentHook("begin", "", "", "")
-		out, err := cmdAgentRun(prompt, cwd, provider)
+		out, err := cmdAgentRun(prompt, cwd, provider, history)
 		agentHook = nil
 		if err != nil {
 			ch <- StreamChunk{Text: fmt.Sprintf("[agent error: %v]", err), Provider: "agent"}
